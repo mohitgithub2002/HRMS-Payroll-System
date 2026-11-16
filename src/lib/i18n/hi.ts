@@ -1,3 +1,4 @@
+import { easyHi } from "./easy.hi";
 import type { en } from "./en";
 import type { DeepStrings } from "./types";
 
@@ -14,6 +15,7 @@ export const hi: DeepStrings<typeof en> = {
     govt: "रक्षा मंत्रालय · भारत सरकार",
   },
   common: {
+    appliedNow: "सहेजा गया। यह तुरंत लागू है।",
     choose: "चुनें…",
     save: "सहेजें",
     saveChanges: "बदलाव सहेजें",
@@ -2124,6 +2126,9 @@ export const hi: DeepStrings<typeof en> = {
       wrongStage: "यह वेतन अब उस चरण में नहीं है। पृष्ठ फिर से लोड करें।",
       otpNeeded: "मोबाइल पर आए ओटीपी से वेतन स्क्रीन पर ही स्वीकृत करें।",
       cannotReopen: "बैंक फ़ाइल जारी हो चुकी है, इसलिए यह वेतन अब फिर से नहीं खुल सकता।",
+      simpleOnly: "यह काम सरल कार्य-पद्धति में वेतन स्क्रीन से होता है।",
+      cannotTakeBack: "यह बिल पूरा हो चुका है और अब वापस नहीं लिया जा सकता।",
+      nothingReady: "अभी कोई बिल इसके लिए तैयार नहीं है।",
       bankFileExists: "इस वेतन की बैंक फ़ाइल पहले से है।",
       noBankFor: "{code} के रिकॉर्ड में बैंक खाता नहीं है।",
       returnFile: "वापसी फ़ाइल पढ़ी नहीं जा सकी। पंक्ति {lines} जाँचें।",
@@ -3900,4 +3905,5 @@ export const hi: DeepStrings<typeof en> = {
     noAccessTitle: "पहुँच नहीं",
     noAccessBody: "आपके लॉगिन में यह स्क्रीन शामिल नहीं है। ज़रूरत हो तो उपयोगकर्ता एवं सेटिंग प्रबंधक से कहें।",
   },
+  easy: easyHi,
 };

@@ -25,6 +25,8 @@ export interface ApprovalKind<P = unknown> {
   allowSelfSubject?: boolean;
   /** Old/new values carry pay, bank or Aadhaar. */
   sensitive?: boolean;
+  /** Never decided straight after the request in the simple way (the two-step pay bill: a Checker, then an OTP). */
+  noDirect?: boolean;
   onApprove(ctx: DecisionContext<P>): Promise<void>;
   onReject?(ctx: DecisionContext<P>): Promise<void>;
   onReturn?(ctx: DecisionContext<P>): Promise<void>;
@@ -41,4 +43,9 @@ export function defineApprovalKind<P>(def: ApprovalKind<P>): ApprovalKind<P> {
 
 export function getApprovalKind(kind: string): ApprovalKind<unknown> | undefined {
   return kinds.get(kind) as ApprovalKind<unknown> | undefined;
+}
+
+/** Every kind registered so far (the tests check that each belongs to a function — lib/approvals/areas.ts). */
+export function listApprovalKinds(): string[] {
+  return [...kinds.keys()];
 }

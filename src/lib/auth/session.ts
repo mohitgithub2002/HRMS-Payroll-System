@@ -11,6 +11,7 @@ import { getRequestMeta } from "@/lib/request-meta";
 import type { Principal } from "./access";
 import { accessState } from "./access-state";
 import { pensionOfUser } from "./pensioner";
+import { isSimpleWorkflow } from "@/modules/settings/workflow";
 
 export const SESSION_COOKIE = "dcb_session";
 /** PRD §2 rule 7 / §16: sessions time out after 15 minutes idle. */
@@ -130,6 +131,7 @@ export const getActor = cache(async (): Promise<Actor | null> => {
     sectionId: employee?.sectionId ?? null,
     isEmployee: state.isEmployee,
     isPensioner: state.isPensioner,
+    simple: await isSimpleWorkflow(user.boardId),
     language: user.language === "hi" ? "hi" : "en",
     mustChangePassword: user.mustChangePassword,
     ip: meta.ip,

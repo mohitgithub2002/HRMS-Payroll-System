@@ -24,6 +24,26 @@ export function stageIndex(status: RunStatus | null): number {
   }
 }
 
+/** The simple way of working: work out, review, pay. */
+export const SIMPLE_STAGE_KEYS = ["run", "review", "pay"] as const;
+
+/** Index of the step in progress in the simple way: 0 before the run, 3 when the bill is paid and closed. */
+export function simpleStageIndex(status: RunStatus | null): number {
+  switch (status) {
+    case null:
+      return 0;
+    case "DRAFT":
+    case "CHECKING":
+    case "APPROVING":
+      return 1;
+    case "APPROVED":
+    case "PAID":
+      return 2;
+    case "CLOSED":
+      return 3;
+  }
+}
+
 export const STATUS_TONE: Record<RunStatus, Tone> = {
   DRAFT: "gray",
   CHECKING: "blue",

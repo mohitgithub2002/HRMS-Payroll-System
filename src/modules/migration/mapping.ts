@@ -10,6 +10,7 @@ import { allowedLists, fieldsFor, mappingOf } from "./build";
 import { looksLikeKruti } from "./krutidev";
 import { assertOpen, canSeeMigration, canWorkMigration, stagedTables } from "./staging";
 import { cellOf, TARGET_DEFS, TARGETS, type CodeList, type Codes, type Fields, type Options, type TargetKey } from "./targets";
+import { holds } from "@/lib/auth/access";
 
 /**
  * §15 step 4 (map) and step 5 (clean): the mapping sheet of each target, signed off by Accounts, and the staged values
@@ -18,11 +19,11 @@ import { cellOf, TARGET_DEFS, TARGETS, type CodeList, type Codes, type Fields, t
 
 /** HR maps employees and leave, Payroll the money, Pension the pensioners (§14: HR & Accounts create). */
 export function canMapTarget(actor: Actor, target: TargetKey) {
-  return canWorkMigration(actor) && actor.permissions.includes(TARGET_DEFS[target].owner);
+  return canWorkMigration(actor) && holds(actor, TARGET_DEFS[target].owner);
 }
 
 /** Accounts (Payroll) signs the mapping sheet off. */
-export const canSignMapping = (actor: Actor) => canWorkMigration(actor) && actor.permissions.includes("PAYROLL");
+export const canSignMapping = (actor: Actor) => canWorkMigration(actor) && holds(actor, "PAYROLL");
 
 export function parseTarget(raw: string): TargetKey {
   if (!(TARGETS as readonly string[]).includes(raw)) throw notFound();

@@ -134,7 +134,7 @@ describe.skipIf(!hasTestDb)("statutory and tax (§9, ST-01 to ST-09)", () => {
     expect(subs[0].amount).toBe(line((await slipOf(runs[`OPS|${m1}`], ids.hi)).lines, "GPF"));
     expect(acct.balance).toBe(400000 + subs[0].amount * 2);
     await expect(proposePayItem(payroll, { employeeId: ids.hi, headCode: "GPF", amount: 1000, fromMonth: today.slice(0, 7) })).rejects.toMatchObject({ key: "payroll.errors.gpfMin" });
-    await expect(proposePayItem(payroll, { employeeId: ids.hi, headCode: "GPF", amount: 90000, fromMonth: today.slice(0, 7) })).rejects.toMatchObject({ key: "payroll.errors.gpfCap" });
+    await expect(proposePayItem(payroll, { employeeId: ids.hi, headCode: "GPF", amount: 510000, fromMonth: today.slice(0, 7) })).rejects.toMatchObject({ key: "payroll.errors.gpfCap" }); // over the yearly cap whichever month this runs in
     await expect(proposePayItem(payroll, { employeeId: ids.nps, headCode: "GPF", amount: 9000, fromMonth: today.slice(0, 7) })).rejects.toMatchObject({ key: "payroll.errors.gpfOnlyOps" });
   });
 

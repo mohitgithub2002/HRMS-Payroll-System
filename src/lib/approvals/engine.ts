@@ -7,6 +7,9 @@ import { db, type Tx } from "@/lib/db";
 import { AppError, badRequest, conflict, forbidden, notFound } from "@/lib/errors";
 import type { TKey } from "@/lib/i18n";
 import { emit } from "@/lib/outbox";
+import { isFullAdmin } from "@/lib/auth/access";
+import { decidesKind, FILE_RELEASE, kindsDecidedBy } from "./areas";
+import { collectSubmitted, noteSubmitted } from "./direct";
 import { getApprovalKind } from "./registry";
 
 export type Decision = "APPROVE" | "REJECT" | "RETURN";
@@ -44,7 +47,8 @@ export async function submitForApproval(tx: Tx, actor: Actor, input: SubmitInput
   await loadKinds();
   const def = getApprovalKind(input.kind);
   if (!def) throw new Error(`Unknown approval kind ${input.kind}`);
-  if (input.subjectEmployeeId && input.subjectEmployeeId === actor.employeeId && !def.allowSelfSubject) {
+  // PRD §2 rule 2. In the simple way the Board's Admin does everything, their own record included.
+  if (input.subjectEmployeeId && input.subjectEmployeeId === actor.employeeId && !def.allowSelfSubject && !(actor.simple && isFullAdmin(actor))) {
     throw forbidden("errors.ownPay");
   }
   const task = await tx.approvalTask.create({
@@ -73,6 +77,7 @@ export async function submitForApproval(tx: Tx, actor: Actor, input: SubmitInput
     newValue: { taskId: task.id, kind: input.kind },
     sensitive: def.sensitive,
   });
+  noteSubmitted(task.id);
   return task;
 }
 
@@ -85,7 +90,7 @@ export async function chainTask(
   from: ApprovalTask,
   next: { kind?: string; requiredPermission: Permission; title?: string; titleHi?: string; payload?: unknown; details?: unknown; makerId?: string; makerName?: string },
 ) {
-  return tx.approvalTask.create({
+  const task = await tx.approvalTask.create({
     data: {
       boardId: from.boardId,
       kind: next.kind ?? from.kind,
@@ -103,6 +108,8 @@ export async function chainTask(
       makerNote: from.makerNote,
     },
   });
+  noteSubmitted(task.id);
+  return task;
 }
 
 /** The maker withdraws an item that nobody has decided yet. */
@@ -128,9 +135,25 @@ export async function pendingFor(boardId: string, entityType: string, entityId: 
   });
 }
 
+/**
+ * Simple way of working: this login decides the task because it looks after the function the task belongs to —
+ * the HR manager everything about people, the Accounts manager everything about pay, the Admin everything.
+ * A file waiting for release is decided by the person who built it.
+ */
+export function decidesDirectly(actor: Actor, task: Pick<ApprovalTask, "kind" | "makerId">): boolean {
+  if (!actor.simple || actor.loginType === "EMPLOYEE") return false;
+  if (task.kind === FILE_RELEASE) return isFullAdmin(actor) || task.makerId === actor.userId;
+  return decidesKind(actor, task.kind);
+}
+
 /** Why this actor may not decide this task, or null when they may. */
-export function decisionBlocker(actor: Actor, task: Pick<ApprovalTask, "requiredPermission" | "sectionId" | "makerId" | "subjectEmployeeId" | "status">): TKey | null {
+export function decisionBlocker(actor: Actor, task: Pick<ApprovalTask, "kind" | "requiredPermission" | "sectionId" | "makerId" | "subjectEmployeeId" | "status">): TKey | null {
   if (task.status !== "PENDING") return "errors.alreadyDecided";
+  if (decidesDirectly(actor, task)) {
+    // The simple way: no second person. Only the Admin decides things about their own pay or record.
+    if (task.subjectEmployeeId && task.subjectEmployeeId === actor.employeeId && !isFullAdmin(actor)) return "errors.ownPay";
+    return null;
+  }
   if (!actor.permissions.includes(task.requiredPermission)) return "errors.forbidden";
   if (task.requiredPermission === "REPORTING_OFFICER" && task.sectionId && task.sectionId !== actor.sectionId) {
     return "errors.forbidden";
@@ -192,22 +215,57 @@ export async function decide(actor: Actor, taskId: string, decision: Decision, n
   return result;
 }
 
+/**
+ * Simple way of working: after a request, the items it sent for approval are decided there and then when the
+ * person who made the request is the one who decides them — and so are the next steps of a chain (a second
+ * approval). Returns how many were approved.
+ *
+ * If the first item cannot be approved (a check that only runs at approval fails), it is withdrawn and the
+ * reason is shown, so the person can correct the entry and save again. A later step that fails stays waiting.
+ */
+export async function approveDirectly(actor: Actor, taskIds: string[]): Promise<number> {
+  if (!actor.simple || actor.loginType === "EMPLOYEE" || !taskIds.length) return 0;
+  await loadKinds();
+  const first = new Set(taskIds);
+  const queue = [...taskIds];
+  let done = 0;
+  // The list grows while we work: approving one step may open the next.
+  for (let i = 0; i < queue.length && i < 50; i++) {
+    const id = queue[i];
+    const task = await db.approvalTask.findFirst({ where: { id, boardId: actor.boardId, status: "PENDING" } });
+    if (!task || getApprovalKind(task.kind)?.noDirect) continue;
+    if (decisionBlocker(actor, task) !== null || !decidesDirectly(actor, task)) continue;
+    try {
+      const { taskIds: next } = await collectSubmitted(() => decide(actor, id, "APPROVE", null));
+      queue.push(...next);
+      done++;
+    } catch (e) {
+      if (first.has(id) && task.makerId === actor.userId) await cancelTask(actor, id).catch(() => undefined);
+      throw e;
+    }
+  }
+  return done;
+}
+
 /** Tasks this actor may decide. */
 function inboxWhere(actor: Actor): Prisma.ApprovalTaskWhereInput {
   const perms = actor.permissions;
   const or: Prisma.ApprovalTaskWhereInput[] = perms
     .filter((p) => p !== "REPORTING_OFFICER")
-    .map((p) => ({ requiredPermission: p }));
+    .map((p) => ({ requiredPermission: p, makerId: { not: actor.userId } }));
   if (perms.includes("REPORTING_OFFICER") && actor.sectionId) {
-    or.push({ requiredPermission: "REPORTING_OFFICER", sectionId: actor.sectionId });
+    or.push({ requiredPermission: "REPORTING_OFFICER", sectionId: actor.sectionId, makerId: { not: actor.userId } });
   }
+  // The simple way: everything in the functions this login looks after, its own entries included.
+  const kinds = kindsDecidedBy(actor);
+  if (kinds.length) or.push({ kind: { in: kinds } });
+  if (actor.simple && actor.loginType !== "EMPLOYEE") or.push(isFullAdmin(actor) ? { kind: FILE_RELEASE } : { kind: FILE_RELEASE, makerId: actor.userId });
   if (or.length === 0) return { id: "__none__" };
   return {
     boardId: actor.boardId,
     status: "PENDING",
-    makerId: { not: actor.userId },
     OR: or,
-    AND: actor.employeeId
+    AND: actor.employeeId && !(actor.simple && isFullAdmin(actor))
       ? [{ OR: [{ subjectEmployeeId: null }, { subjectEmployeeId: { not: actor.employeeId } }] }]
       : [],
   };
@@ -242,8 +300,8 @@ export async function listDecidedBy(actor: Actor, take = 50) {
 }
 
 /** The maker, the decider and anyone who could have decided it may open a task; nobody else. */
-export function canOpenTask(actor: Actor, task: Pick<ApprovalTask, "requiredPermission" | "makerId" | "deciderId">) {
-  return task.makerId === actor.userId || task.deciderId === actor.userId || actor.permissions.includes(task.requiredPermission);
+export function canOpenTask(actor: Actor, task: Pick<ApprovalTask, "kind" | "requiredPermission" | "makerId" | "deciderId">) {
+  return task.makerId === actor.userId || task.deciderId === actor.userId || actor.permissions.includes(task.requiredPermission) || decidesDirectly(actor, task);
 }
 
 export async function getTask(actor: Actor, id: string) {

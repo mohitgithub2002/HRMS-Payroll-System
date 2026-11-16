@@ -50,6 +50,7 @@ defineApprovalKind<z.infer<typeof payItemSchema>>({
 /** S-40 stage 3: the Checker forwards the payroll to the Admin, or returns it. */
 defineApprovalKind<{ runId: string }>({
   kind: "payroll.check",
+  noDirect: true,
   requiredPermission: "CHECKER",
   sensitive: true,
   async onApprove({ tx, task, payload, actor }) {
@@ -66,6 +67,7 @@ defineApprovalKind<{ runId: string }>({
 /** S-40 stage 4: an Admin (Approver + Pay bill signer) approves with an OTP, or returns it. */
 defineApprovalKind<{ runId: string }>({
   kind: "payroll.approve",
+  noDirect: true,
   requiredPermission: "PAY_BILL_SIGNER",
   sensitive: true,
   async onApprove({ tx, payload, actor }) {

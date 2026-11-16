@@ -1,5 +1,7 @@
 "use client";
 
+import { markApplied } from "@/lib/applied";
+
 /** Browser-side helper for calling /api/v1. Throws ApiError with a ready-to-show (translated) message. */
 export class ApiError extends Error {
   constructor(
@@ -27,7 +29,7 @@ export async function api<T = unknown>(url: string, opts: { method?: Method; bod
     throw new ApiError(document.documentElement.lang === "hi" ? "सर्वर से संपर्क नहीं हो सका।" : "Could not reach the server.", 0, "network");
   }
   const payload = (await res.json().catch(() => null)) as
-    | { ok: true; data: T }
+    | { ok: true; data: T; applied?: boolean }
     | { ok: false; error: { code: string; message: string; fields?: Record<string, string> } }
     | null;
   if (res.status === 401 && !url.includes("/auth/")) {
@@ -36,6 +38,7 @@ export async function api<T = unknown>(url: string, opts: { method?: Method; bod
   }
   if (!payload) throw new ApiError("Unexpected response", res.status, "bad_response");
   if (!payload.ok) throw new ApiError(payload.error.message, res.status, payload.error.code, payload.error.fields);
+  if (payload.applied) markApplied();
   return payload.data;
 }
 
@@ -47,8 +50,9 @@ export async function apiForm<T = unknown>(url: string, form: FormData, method: 
   } catch {
     throw new ApiError(document.documentElement.lang === "hi" ? "सर्वर से संपर्क नहीं हो सका।" : "Could not reach the server.", 0, "network");
   }
-  const payload = (await res.json().catch(() => null)) as { ok: true; data: T } | { ok: false; error: { code: string; message: string; fields?: Record<string, string> } } | null;
+  const payload = (await res.json().catch(() => null)) as { ok: true; data: T; applied?: boolean } | { ok: false; error: { code: string; message: string; fields?: Record<string, string> } } | null;
   if (!payload) throw new ApiError("Unexpected response", res.status, "bad_response");
   if (!payload.ok) throw new ApiError(payload.error.message, res.status, payload.error.code, payload.error.fields);
+  if (payload.applied) markApplied();
   return payload.data;
 }

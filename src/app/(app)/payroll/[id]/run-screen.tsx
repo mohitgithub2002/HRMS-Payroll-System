@@ -16,9 +16,10 @@ import { getT } from "@/lib/i18n/server";
 import { formatINR } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { NET_CHANGE_LIMIT_PCT } from "@/modules/payroll/checks";
-import { signedPct, STAGE_KEYS, STATUS_TONE, stageIndex } from "@/modules/payroll/present";
+import { signedPct, SIMPLE_STAGE_KEYS, simpleStageIndex, STAGE_KEYS, STATUS_TONE, stageIndex } from "@/modules/payroll/present";
 import { getRun } from "@/modules/payroll/run";
 import { ExceptionsList } from "./exceptions-list";
+import { SimplePanel } from "./simple-panel";
 import { StagePanel } from "./stage-panel";
 
 const TABS = ["exceptions", "people", "sections", "heads", "prints"] as const;
@@ -35,9 +36,12 @@ export async function RunScreen({ actor, id, tab: tabParam, base }: { actor: Act
   const { run } = data;
   if (baseOf(run.payGroup) !== base) redirect(`${baseOf(run.payGroup)}/${run.id}${tabParam ? `?tab=${tabParam}` : ""}`);
   const pension = run.payGroup === "PENSION";
-  const defaultTab: Tab = run.status === "DRAFT" && data.exceptions.length ? "exceptions" : run.status === "CHECKING" ? "sections" : "people";
-  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : defaultTab;
-  const steps = STAGE_KEYS.map((k) => t(`payroll.stages.${k}`));
+  // The simple way of working: three steps, one action card, and the checks settled with one click.
+  const simple = data.can.simple;
+  const tabs: readonly Tab[] = simple ? TABS.filter((k) => k !== "sections") : TABS;
+  const defaultTab: Tab = run.status === "DRAFT" && (simple ? data.open > 0 : data.exceptions.length) ? "exceptions" : run.status === "CHECKING" && !simple ? "sections" : "people";
+  const tab: Tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : defaultTab;
+  const steps = simple ? SIMPLE_STAGE_KEYS.map((k) => t(`easy.payroll.steps.${k}`)) : STAGE_KEYS.map((k) => t(`payroll.stages.${k}`));
   const title = locale === "hi" ? data.titleHi : data.title;
   const change = data.previous && data.previous.net > 0 ? ((run.net - data.previous.net) / data.previous.net) * 100 : null;
   const bigChanges = data.people.filter((p) => p.changePct !== null && Math.abs(p.changePct) > NET_CHANGE_LIMIT_PCT).length;
@@ -60,7 +64,7 @@ export async function RunScreen({ actor, id, tab: tabParam, base }: { actor: Act
 
       <Card className="mb-5">
         <CardBody className="py-4">
-          <Stepper steps={steps} current={stageIndex(run.status)} label={pension ? t("pension.title") : t("payroll.title")} />
+          <Stepper steps={steps} current={simple ? simpleStageIndex(run.status) : stageIndex(run.status)} label={pension ? t("pension.title") : t("payroll.title")} />
         </CardBody>
       </Card>
 
@@ -84,32 +88,49 @@ export async function RunScreen({ actor, id, tab: tabParam, base }: { actor: Act
         <StatTile label={pension ? t("pension.bills.net") : t("payroll.net")} value={formatINR(run.net)} icon={<FileText className="size-5" aria-hidden="true" />} hint={change === null ? t("payroll.noLast") : t("payroll.vsLast", { pct: signedPct(change) })} />
       </div>
 
-      <StagePanel
-        runId={run.id}
-        status={run.status}
-        can={data.can}
-        open={data.open}
-        failed={data.failed}
-        bankFile={data.bankFile}
-        files={data.files}
-        approvedBy={run.approvedByName}
-        approvedAt={run.approvedAt ? formatDateTime(run.approvedAt, locale) : null}
-        closedAt={run.closedAt ? formatDateTime(run.closedAt, locale) : null}
-        returnAt={run.returnAt ? formatDateTime(run.returnAt, locale) : null}
-        payGroup={run.payGroup}
-        month={run.month}
-      />
+      {simple ? (
+        <SimplePanel
+          runId={run.id}
+          status={run.status}
+          can={data.can}
+          open={data.open}
+          failed={data.failed}
+          people={run.employees}
+          net={formatINR(run.net)}
+          bankFile={data.bankFile}
+          files={data.files}
+          closedAt={run.closedAt ? formatDateTime(run.closedAt, locale) : null}
+          returnAt={run.returnAt ? formatDateTime(run.returnAt, locale) : null}
+          pension={pension}
+        />
+      ) : (
+        <StagePanel
+          runId={run.id}
+          status={run.status}
+          can={data.can}
+          open={data.open}
+          failed={data.failed}
+          bankFile={data.bankFile}
+          files={data.files}
+          approvedBy={run.approvedByName}
+          approvedAt={run.approvedAt ? formatDateTime(run.approvedAt, locale) : null}
+          closedAt={run.closedAt ? formatDateTime(run.closedAt, locale) : null}
+          returnAt={run.returnAt ? formatDateTime(run.returnAt, locale) : null}
+          payGroup={run.payGroup}
+          month={run.month}
+        />
+      )}
 
       <LinkTabs
         className="mb-5 mt-6"
         active={tab}
-        tabs={TABS.map((k) => ({ key: k, label: t(`payroll.tabsRun.${k}`), href: href(k), count: k === "exceptions" ? data.open : k === "people" ? data.people.length : undefined }))}
+        tabs={tabs.map((k) => ({ key: k, label: t(`payroll.tabsRun.${k}`), href: href(k), count: k === "exceptions" ? data.open : k === "people" ? data.people.length : undefined }))}
       />
 
       {tab === "exceptions" && (
         <Card>
           <CardHeader title={t("payroll.exceptions.title")} icon={<AlertTriangle className="size-4.5" aria-hidden="true" />} />
-          <ExceptionsList runId={run.id} items={data.exceptions} canResolve={data.can.resolve} />
+          <ExceptionsList runId={run.id} items={data.exceptions} canResolve={data.can.resolve} quick={simple} />
         </Card>
       )}
 

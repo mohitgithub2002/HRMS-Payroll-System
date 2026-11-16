@@ -1,6 +1,6 @@
 import "server-only";
 import type { Employee, Prisma } from "@/generated/prisma/client";
-import { pendingFor, submitForApproval } from "@/lib/approvals/engine";
+import { decidesDirectly, pendingFor, submitForApproval } from "@/lib/approvals/engine";
 import type { ApprovalDetails } from "@/lib/approvals/details";
 import { audit } from "@/lib/audit";
 import { canAll, scopeFor } from "@/lib/auth/access";
@@ -367,7 +367,7 @@ export async function getApplication(actor: Actor, id: string) {
   const e = await db.employee.findUniqueOrThrow({ where: { id: a.employeeId }, select: { ...empSelect, post: { select: { name: true, nameHi: true } }, section: { select: { name: true, nameHi: true } } } });
   const task = a.taskId ? await db.approvalTask.findUnique({ where: { id: a.taskId } }) : null;
   const decider = task?.requiredPermission;
-  if (!canSeeLeaveOf(actor, e) && !(decider && actor.permissions.includes(decider))) throw forbidden();
+  if (!canSeeLeaveOf(actor, e) && !(decider && actor.permissions.includes(decider)) && !(task && decidesDirectly(actor, task))) throw forbidden();
   const type = (await leaveRules(actor.boardId)).find((t) => t.code === a.leaveCode);
   const balances = await balancesFor(e, actor.boardId);
   return { application: a, employee: e, type, task, balances };

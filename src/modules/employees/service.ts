@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma, type Employee } from "@/generated/prisma/client";
-import { submitForApproval, pendingFor } from "@/lib/approvals/engine";
+import { decidesDirectly, submitForApproval, pendingFor } from "@/lib/approvals/engine";
 import type { ApprovalDetails } from "@/lib/approvals/details";
 import { audit } from "@/lib/audit";
 import { canAll, canSeeSensitive, scopeFor } from "@/lib/auth/access";
@@ -683,7 +683,7 @@ export async function revealIdentifier(actor: Actor, employeeId: string, field: 
 /** The proposed new PAN / bank number inside a pending change, for the person deciding it. */
 export async function revealProposed(actor: Actor, taskId: string, field: "pan" | "bankAccount") {
   const task = await db.approvalTask.findFirst({ where: { id: taskId, boardId: actor.boardId } });
-  if (!task || !canRevealIds(actor) || !actor.permissions.includes(task.requiredPermission)) throw forbidden();
+  if (!task || !canRevealIds(actor) || !(actor.permissions.includes(task.requiredPermission) || decidesDirectly(actor, task))) throw forbidden();
   const data = (task.payload as { data?: Record<string, unknown> }).data ?? {};
   let token = data[`${field}Enc`] as string | undefined;
   if (!token && task.kind === "employee.create") {

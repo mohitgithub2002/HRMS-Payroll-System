@@ -245,6 +245,11 @@ export async function getRun(actor: Actor, runId: string) {
       repay: run.status === "PAID" && canRun(actor, run.payGroup) && failed > 0,
       close: run.status === "PAID" && canRun(actor, run.payGroup) && Boolean(run.returnAt) && failed === 0,
       print: true,
+      // The simple way of working (payroll/simple.ts): one person works the bill out, pays it and finishes it.
+      simple: Boolean(actor.simple),
+      pay: Boolean(actor.simple) && canRun(actor, run.payGroup) && ((run.status === "DRAFT" && open === 0 && run.employees > 0) || (run.status === "APPROVED" && !released)),
+      takeBack: Boolean(actor.simple) && canRun(actor, run.payGroup) && (run.status === "CHECKING" || run.status === "APPROVING" || ((run.status === "APPROVED" || run.status === "PAID") && !run.returnAt)),
+      finish: Boolean(actor.simple) && canRun(actor, run.payGroup) && run.status === "PAID" && failed === 0,
     },
     isMaker,
   };

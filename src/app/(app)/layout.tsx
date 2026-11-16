@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { countInbox } from "@/lib/approvals";
 import { scopeFor } from "@/lib/auth/access";
 import { hasApprovalsInbox, menuFor } from "@/lib/auth/menu";
+import { roleOf } from "@/lib/auth/roles";
 import { IDLE_TIMEOUT_MS, requireActor } from "@/lib/auth/session";
 import { MARK } from "@/lib/brand";
 
@@ -23,6 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         loginId: actor.loginId,
         loginType: actor.isPensioner && !actor.isEmployee ? "PENSIONER" : actor.loginType,
         permissions: actor.permissions,
+        // The simple way of working names people by role (HR manager, Accounts manager …).
+        roleKey: actor.simple && !(actor.isPensioner && !actor.isEmployee) ? `easy.roles.${roleOf(actor.loginType, actor.permissions)}` : undefined,
       }}
       inboxCount={inbox}
       logo={MARK}

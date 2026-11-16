@@ -1,3 +1,4 @@
+import { easyEn } from "./easy.en";
 /**
  * English text. Simple words, short sentences, government terms where clerks expect them
  * (EOL, dies-non, MACP, PPO) — PRD §16 "Ease of use".
@@ -12,6 +13,7 @@ export const en = {
     govt: "Ministry of Defence · Government of India",
   },
   common: {
+    appliedNow: "Saved. It applies right away.",
     choose: "Choose…",
     save: "Save",
     saveChanges: "Save changes",
@@ -2122,6 +2124,9 @@ export const en = {
       wrongStage: "This payroll is not at that stage any more. Reload the page.",
       otpNeeded: "Approve from the payroll screen with the OTP sent to your mobile.",
       cannotReopen: "The bank file has been released, so this payroll can no longer be reopened.",
+      simpleOnly: "This is done from the payroll screen in the simple way of working.",
+      cannotTakeBack: "This bill is finished and can no longer be taken back.",
+      nothingReady: "No bill is ready for that yet.",
       bankFileExists: "A bank file for this payroll already exists.",
       noBankFor: "{code} has no bank account on the record.",
       returnFile: "The return file could not be read. Check line(s) {lines}.",
@@ -3898,4 +3903,5 @@ export const en = {
     noAccessTitle: "No access",
     noAccessBody: "Your login does not include this screen. Ask the User & settings manager if you need it.",
   },
+  easy: easyEn,
 } as const;

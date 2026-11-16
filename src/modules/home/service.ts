@@ -333,7 +333,7 @@ export async function homeTiles(actor: Actor): Promise<Tile[]> {
   if (can(actor, "audit_trail", "view")) {
     const start = new Date(fromISODate(todayIST()).getTime() - 5.5 * 3600_000);
     const count = await db.auditLog.count({
-      where: { boardId: actor.boardId, at: { gte: start }, ...(actor.permissions.includes("APPROVER") ? {} : { category: "SYSTEM" }) },
+      where: { boardId: actor.boardId, at: { gte: start }, ...(scopeFor(actor, "audit_trail", "view") === "all" ? {} : { category: "SYSTEM" }) },
     });
     tiles.push({ key: "auditToday", value: count, href: "/admin/audit", icon: "history", tone: "gray" });
   }

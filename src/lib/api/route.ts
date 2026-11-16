@@ -1,6 +1,8 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
+import { approveDirectly } from "@/lib/approvals/engine";
+import { collectSubmitted } from "@/lib/approvals/direct";
 import { getActor, type Actor } from "@/lib/auth/session";
 import { AppError, RateLimitError, badRequest, forbidden, unauthorized } from "@/lib/errors";
 import { makeT, type TKey } from "@/lib/i18n";
@@ -109,8 +111,9 @@ function noStore(res: Response) {
   return res;
 }
 
-function respond(result: unknown) {
-  return noStore(result instanceof Response ? result : NextResponse.json({ ok: true, data: result ?? null }));
+/** `applied`: what was entered counted at once (the simple way of working) — the screen says "Saved", not "Sent". */
+function respond(result: unknown, applied = false) {
+  return noStore(result instanceof Response ? result : NextResponse.json({ ok: true, data: result ?? null, ...(applied ? { applied: true } : {}) }));
 }
 
 export function apiRoute<P extends Params = Params>(handler: AuthedHandler<P>) {
@@ -122,7 +125,10 @@ export function apiRoute<P extends Params = Params>(handler: AuthedHandler<P>) {
       limit(`session:${actor.sessionId}`, LIMITS.session);
       const params = (await context?.params) ?? ({} as P);
       const meta = await getRequestMeta();
-      return respond(await handler({ ...build(req, params, meta), actor }));
+      const { result, taskIds } = await collectSubmitted(() => handler({ ...build(req, params, meta), actor }));
+      // The simple way of working: what this person entered and may decide themselves counts at once.
+      const applied = await approveDirectly(actor, taskIds);
+      return respond(result, applied > 0);
     } catch (e) {
       return noStore(await toErrorResponse(e));
     }

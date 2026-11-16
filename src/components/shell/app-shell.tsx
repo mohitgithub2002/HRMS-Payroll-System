@@ -74,6 +74,8 @@ interface ShellUser {
   loginId: string;
   loginType: string;
   permissions: string[];
+  /** Text key of the person's role, when the Board works the simple way. */
+  roleKey?: string;
 }
 
 function isActive(pathname: string, href: string) {
@@ -171,7 +173,7 @@ function UserMenu({ user }: { user: ShellUser }) {
             <p className="text-xs text-ink-500">{t("shell.signedInAs")}</p>
             <p className="truncate text-sm font-semibold text-ink-900">{user.name}</p>
             <p className="truncate text-xs text-ink-500">
-              {tDynamic(t, `loginType.${user.loginType}`)} · {user.loginId}
+              {tDynamic(t, user.roleKey ?? `loginType.${user.loginType}`)} · {user.loginId}
             </p>
           </div>
           <Link href="/profile" role="menuitem" onClick={() => setOpen(false)} className="mt-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 hover:bg-ink-50">
@@ -231,7 +233,7 @@ export function AppShell({
             <Avatar name={user.name} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink-900">{user.name}</p>
-              <p className="truncate text-xs text-ink-500">{tDynamic(t, `loginType.${user.loginType}`)}</p>
+              <p className="truncate text-xs text-ink-500">{tDynamic(t, user.roleKey ?? `loginType.${user.loginType}`)}</p>
             </div>
             <button type="button" onClick={signOut} className="rounded-lg p-1.5 text-ink-400 hover:bg-white hover:text-red-600" aria-label={t("common.signOut")} title={t("common.signOut")}>
               <LogOut className="size-4" />

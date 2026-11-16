@@ -311,7 +311,9 @@ onFileReleased("bank.salary", async (tx, file, actor, afterCommit) => {
   await tx.payrollRun.update({ where: { id: run.id }, data: { status: "PAID", paidAt: new Date() } });
   await audit(tx, actor, { action: "PAY", entityType: "PayrollRun", entityId: run.id, summary: `Bank file released — ${titleOf(run)} is paid` });
   await emit(tx, run.boardId, "payroll.paid", { type: "PayrollRun", id: run.id }, { month: run.month, payGroup: run.payGroup });
-  // SL-04: credit day — payslip notices go out once the release is saved.
+  // SL-04: credit day — payslip notices go out once the release is saved. In the simple way of working the bill
+  // can still be taken back until the month is finished, so the notices go out then (payroll/simple.ts).
+  if (actor.simple) return;
   afterCommit(async () => {
     await sendPayslipNotices(run.boardId, run.id);
   });

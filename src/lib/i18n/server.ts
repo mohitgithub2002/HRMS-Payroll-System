@@ -1,6 +1,8 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { currentBoard } from "@/lib/board";
+import { isSimpleWorkflow } from "@/modules/settings/workflow";
 import { makeT } from "./index";
 import { LOCALE_COOKIE, type Locale } from "./types";
 
@@ -10,7 +12,16 @@ export const getLocale = cache(async (): Promise<Locale> => {
   return value === "hi" ? "hi" : "en";
 });
 
+/** Whether the Board works the simple way (Settings → How work is approved) — it changes some wording. */
+export const getSimple = cache(async (): Promise<boolean> => {
+  try {
+    return await isSimpleWorkflow((await currentBoard()).id);
+  } catch {
+    return false;
+  }
+});
+
 export async function getT() {
-  const locale = await getLocale();
-  return { t: makeT(locale), locale };
+  const [locale, simple] = await Promise.all([getLocale(), getSimple()]);
+  return { t: makeT(locale, simple), locale, simple };
 }

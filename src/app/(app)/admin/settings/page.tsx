@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, Td, Th, THead, Tr } from "@/components/ui/table";
-import { can } from "@/lib/auth/access";
+import { can, canManageUsers, isFullAdmin } from "@/lib/auth/access";
 import { requireActor } from "@/lib/auth/session";
 import { CONNECTORS } from "@/lib/connectors/types";
 import { env } from "@/lib/env";
 import { getT } from "@/lib/i18n/server";
 import { getAllSettings } from "@/modules/settings/service";
 import { SettingsForms } from "./settings-forms";
+import { WorkflowCard } from "./workflow-card";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -20,11 +21,12 @@ export default async function SettingsPage() {
   if (!can(actor, "users_settings", "view")) return <NoAccess />;
   const { t } = await getT();
   const settings = await getAllSettings(actor.boardId);
-  const canEdit = actor.permissions.includes("USER_SETTINGS_MANAGER");
+  const canEdit = canManageUsers(actor);
 
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
+      <WorkflowCard initial={settings.workflow.mode} readOnly={!canEdit && !isFullAdmin(actor)} />
       <SettingsForms initial={settings} readOnly={!canEdit} smsForcedConsole={env().SMS_PROVIDER === "console"} />
 
       <Card className="mt-6">

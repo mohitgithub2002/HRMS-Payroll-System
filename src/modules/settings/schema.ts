@@ -48,6 +48,14 @@ export const settingsSchemas = {
   general: z.object({
     attendanceLockDay: z.number().int().min(1).max(28),
   }),
+  /**
+   * How work is approved. "simple": the Admin does everything, the HR manager decides everything about people and
+   * the Accounts manager works out and pays salaries — what they enter counts at once. "twoStep": every entry is
+   * checked by a second person and the pay bill is signed by an Admin with an OTP (PRD §2, §14).
+   */
+  workflow: z.object({
+    mode: z.enum(["simple", "twoStep"]),
+  }),
   /** Attendance rules (PRD §6) and the biometric devices allowed to push punches (AT-01). */
   attendance: z.object({
     officeStart: z.string().regex(HHMM, "validation.time"),
@@ -133,6 +141,7 @@ export const SETTING_DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   bank: { name: "", format: "GENERIC_CSV", fileType: "XLSX", debitAccountLast4: "", ifsc: "" },
   // PRD §6: each section locks its month by the 25th.
   general: { attendanceLockDay: 25 },
+  workflow: { mode: "simple" },
   // Central government office hours in Delhi; to confirm for DCB (PRD §18).
   attendance: { officeStart: "09:00", graceMinutes: 15, halfDayMinutes: 240, weeklyOff: [0, 6], devices: [] },
   statutory: {

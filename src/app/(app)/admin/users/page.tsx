@@ -11,7 +11,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { RowLink } from "@/components/ui/row-link";
 import { Table, Td, Th, THead } from "@/components/ui/table";
-import { can } from "@/lib/auth/access";
+import { can, canManageUsers } from "@/lib/auth/access";
+import { roleOf } from "@/lib/auth/roles";
 import { requireActor } from "@/lib/auth/session";
 import { formatDateTime } from "@/lib/dates";
 import { tDynamic } from "@/lib/i18n";
@@ -30,7 +31,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const status = sp.status === "ACTIVE" || sp.status === "DISABLED" ? sp.status : undefined;
   const page = Math.max(1, Number(sp.page) || 1);
   const data = await listUsers(actor, { q: sp.q, loginType, status, page });
-  const canEdit = actor.permissions.includes("USER_SETTINGS_MANAGER");
+  const canEdit = canManageUsers(actor);
 
   return (
     <div>
@@ -76,8 +77,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <THead>
                 <tr>
                   <Th>{t("common.name")}</Th>
-                  <Th>{t("users.loginType")}</Th>
-                  <Th>{t("users.permissions")}</Th>
+                  {actor.simple ? <Th>{t("easy.roles.title")}</Th> : <Th>{t("users.loginType")}</Th>}
+                  {!actor.simple && <Th>{t("users.permissions")}</Th>}
                   <Th>{t("common.mobile")}</Th>
                   <Th>{t("users.lastLogin")}</Th>
                   <Th>{t("common.status")}</Th>
@@ -95,8 +96,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                         </div>
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap">{tDynamic(t, `loginType.${u.loginType}`)}</Td>
-                    <Td>
+                    <Td className="whitespace-nowrap">{actor.simple ? <Badge tone={u.loginType === "EMPLOYEE" ? "gray" : "green"}>{tDynamic(t, `easy.roles.${roleOf(u.loginType, u.permissions)}`)}</Badge> : tDynamic(t, `loginType.${u.loginType}`)}</Td>
+                    {!actor.simple && <Td>
                       <div className="flex max-w-xs flex-wrap gap-1">
                         {u.permissions.length === 0 ? (
                           <span className="text-ink-400">—</span>
@@ -108,7 +109,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                           ))
                         )}
                       </div>
-                    </Td>
+                    </Td>}
                     <Td className="tabular whitespace-nowrap text-ink-600">{maskMobile(u.mobile)}</Td>
                     <Td className="whitespace-nowrap text-ink-600">{u.lastLoginAt ? formatDateTime(u.lastLoginAt, locale) : t("users.never")}</Td>
                     <Td>

@@ -14,6 +14,7 @@ import { WithdrawButton } from "../../../employees/_components/widgets";
 import { BalanceCards } from "../../_components/balance-cards";
 import { LEAVE_TONE } from "../../_components/tones";
 import { CancelLeaveButton } from "./cancel-button";
+import { decisionBlocker } from "@/lib/approvals";
 
 export const metadata: Metadata = { title: "Leave application" };
 
@@ -26,7 +27,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const { application: a, employee: e, type, task, balances } = await getApplication(actor, id);
   const own = actor.employeeId === e.id;
   const canCancel = a.status === "APPROVED" && ((own && toISODate(a.fromDate) > todayIST()) || canEnterLeave(actor));
-  const canDecide = task?.status === "PENDING" && actor.permissions.includes(task.requiredPermission) && task.makerId !== actor.userId && e.id !== actor.employeeId;
+  const canDecide = Boolean(task) && decisionBlocker(actor, task!) === null;
   const name = (locale === "hi" && e.nameHi) || fullName(e);
   const dates = a.fromDate.getTime() === a.toDate.getTime() ? formatDate(toISODate(a.fromDate), locale) : `${formatDate(toISODate(a.fromDate), locale)} – ${formatDate(toISODate(a.toDate), locale)}`;
   const back = own ? "/leave" : actor.loginType === "EMPLOYEE" ? "/my/team/leave" : "/leave/manage";

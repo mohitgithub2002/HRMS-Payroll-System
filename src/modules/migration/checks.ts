@@ -12,6 +12,7 @@ import { asOnMonth, buildTarget, mappingOf } from "./build";
 import { loadState } from "./loads";
 import { assertOpen, canSeeMigration, stagedTables } from "./staging";
 import { TARGET_DEFS, TARGETS, type Options, type TargetKey } from "./targets";
+import { holds } from "@/lib/auth/access";
 
 /**
  * §15 checks table — each with its rule worked out from the data, and signed by the people the PRD names. A check can
@@ -168,7 +169,7 @@ export async function checksScreen(actor: Actor) {
   for (const code of CHECKS) {
     const result = await runCheck(actor, code);
     const signed = signoffs.filter((s) => s.check === code).map((s) => ({ permission: s.permission, name: s.userName, at: s.createdAt.toISOString() }));
-    const mine = SIGNERS[code].find((p) => actor.permissions.includes(p) && !signed.some((s) => s.permission === p));
+    const mine = SIGNERS[code].find((p) => holds(actor, p) && !signed.some((s) => s.permission === p));
     out.push({ ...result, signers: SIGNERS[code], signed, canSign: result.pass && mine ? mine : null, done: SIGNERS[code].every((p) => signed.some((s) => s.permission === p)) });
   }
   return { checks: out };
@@ -179,7 +180,7 @@ export async function signCheck(actor: Actor, raw: string) {
   if (!(CHECKS as readonly string[]).includes(raw)) throw badRequest();
   const code = raw as CheckCode;
   await assertOpen(actor);
-  const permission = SIGNERS[code].find((p) => actor.permissions.includes(p));
+  const permission = SIGNERS[code].find((p) => holds(actor, p));
   if (!permission || !canSeeMigration(actor)) throw forbidden();
   const result = await runCheck(actor, code);
   if (!result.pass) throw conflict("migration.errors.checkFails");

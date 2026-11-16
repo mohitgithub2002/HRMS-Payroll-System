@@ -2,7 +2,7 @@
  * Menus per login — PRD §13. Each login sees at most 8 items, and only the screens its ticked
  * permissions allow. Pure module: icons are names, resolved to components by the sidebar.
  */
-import { can, rolesOf, type Principal } from "./access";
+import { can, canAll, canManageUsers, isFullAdmin, rolesOf, type Principal } from "./access";
 
 export type MenuIcon =
   | "home"
@@ -65,22 +65,48 @@ const ADMIN_TOOLS: MenuDef[] = [
   { key: "recruitment", href: "/recruitment", icon: "briefcase", show: (p) => can(p, "recruitment", "view") },
   { key: "users", href: "/admin/users", icon: "users", show: (p) => can(p, "users_settings", "view") },
   { key: "rates", href: "/admin/rates", icon: "scale", show: (p) => can(p, "rates_rules", "approve") },
-  { key: "settings", href: "/admin/settings", icon: "settings", show: hasPerm("USER_SETTINGS_MANAGER") },
+  { key: "settings", href: "/admin/settings", icon: "settings", show: canManageUsers },
   // S-90 set-up only: the Admin signs the cut-over; the User & settings manager uploads files.
   { key: "migration", href: "/migration", icon: "database", show: (p) => can(p, "migration", "view") || can(p, "migration", "create") },
   { key: "audit", href: "/admin/audit", icon: "history", show: (p) => can(p, "audit_trail", "view") },
 ];
 
+/**
+ * The simple way of working: the Admin's menu is the Board's work, in the order of the month — people, hiring,
+ * attendance and leave, payroll, pension, reports. Requests to decide are behind the bell in the top bar.
+ */
+const SIMPLE_ADMIN_MENU: MenuDef[] = [
+  { key: "home", href: "/home", icon: "home", show: always },
+  { key: "employees", href: "/employees", icon: "idcard", show: always },
+  { key: "recruitment", href: "/recruitment", icon: "briefcase", show: always },
+  { key: "attendanceLeave", href: "/attendance", icon: "calendar", show: always },
+  { key: "payroll", href: "/payroll", icon: "wallet", show: always },
+  { key: "pension", href: "/pension", icon: "leaf", show: always },
+  { key: "reports", href: "/reports", icon: "chart", show: always },
+];
+
+const SIMPLE_ADMIN_TOOLS: MenuDef[] = [
+  { key: "approvals", href: "/approvals", icon: "inbox", show: always },
+  { key: "statutory", href: "/statutory", icon: "landmark", show: always },
+  { key: "users", href: "/admin/users", icon: "users", show: always },
+  { key: "rates", href: "/admin/rates", icon: "scale", show: always },
+  { key: "settings", href: "/admin/settings", icon: "settings", show: always },
+  { key: "migration", href: "/migration", icon: "database", show: always },
+  { key: "audit", href: "/admin/audit", icon: "history", show: always },
+];
+
 /** The Administration page: the admin tools and other screens this Admin login may open. */
 export function adminTools(p: Principal): MenuItem[] {
   if (p.loginType !== "ADMIN") return [];
-  return ADMIN_TOOLS.filter((d) => d.show(p)).map(({ key, href, icon }) => ({ key, href, icon }));
+  const defs = p.simple && isFullAdmin(p) ? SIMPLE_ADMIN_TOOLS : ADMIN_TOOLS;
+  return defs.filter((d) => d.show(p)).map(({ key, href, icon }) => ({ key, href, icon }));
 }
 
 const HR_MENU: MenuDef[] = [
   { key: "home", href: "/home", icon: "home", show: always },
   { key: "employees", href: "/employees", icon: "idcard", show: (p) => can(p, "employee_master", "view") },
-  { key: "recruitment", href: "/recruitment", icon: "briefcase", show: (p) => can(p, "recruitment", "view") },
+  // The simple way: hiring is the HR manager's; the Accounts manager's menu stays about pay.
+  { key: "recruitment", href: "/recruitment", icon: "briefcase", show: (p) => (p.simple ? canAll(p, "recruitment", "approve") : can(p, "recruitment", "view")) },
   {
     key: "attendanceLeave",
     href: "/attendance",
@@ -115,6 +141,9 @@ export const MAX_MENU_ITEMS = 8;
 export function menuFor(p: Principal): MenuItem[] {
   let defs: MenuDef[];
   if (p.loginType === "ADMIN") {
+    if (p.simple && isFullAdmin(p)) {
+      return [...SIMPLE_ADMIN_MENU.map(({ key, href, icon }) => ({ key, href, icon })), { key: "admin", href: "/admin", icon: "grid" as const }];
+    }
     const core = ADMIN_MENU.filter((d) => d.show(p)).map(({ key, href, icon }) => ({ key, href, icon }));
     const tools = adminTools(p);
     // Shown one by one while everything fits in 8 (the User & settings manager); otherwise behind "Administration".
@@ -130,6 +159,7 @@ export function menuFor(p: Principal): MenuItem[] {
 
 /** Who has an approvals inbox at all (S-04: Admin; HR & A Checker; Employee reporting officer). */
 export function hasApprovalsInbox(p: Principal): boolean {
+  if (p.simple && isFullAdmin(p)) return true;
   return p.permissions.some((x) =>
     ["APPROVER", "PAY_BILL_SIGNER", "CHECKER", "REPORTING_OFFICER", "HR", "PAYROLL", "PENSION"].includes(x),
   );

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { NoAccess } from "@/components/no-access";
 import { PageHeader } from "@/components/ui/page-header";
-import { can } from "@/lib/auth/access";
+import { can, canManageUsers } from "@/lib/auth/access";
 import { requireActor } from "@/lib/auth/session";
 import { getT } from "@/lib/i18n/server";
 import { getUser } from "@/modules/users/service";
@@ -15,12 +15,13 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
   const { t } = await getT();
   const { id } = await params;
   const user = await getUser(actor, id);
-  const canEdit = actor.permissions.includes("USER_SETTINGS_MANAGER");
+  const canEdit = canManageUsers(actor);
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader breadcrumbs={[{ label: t("users.title"), href: "/admin/users" }, { label: user.displayName }]} title={user.displayName} description={canEdit ? t("users.edit") : t("users.readOnly")} />
       <UserForm
         mode="edit"
+        simple={Boolean(actor.simple)}
         readOnly={!canEdit}
         isSelf={user.id === actor.userId}
         initial={{

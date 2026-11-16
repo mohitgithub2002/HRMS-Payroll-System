@@ -29,4 +29,13 @@ export default async function globalSetup() {
   const env = { ...process.env, DATABASE_URL: url };
   execSync("npx prisma migrate deploy", { env, stdio: "pipe" });
   execSync("npx tsx prisma/seed.ts", { env, stdio: "pipe" });
+  // The checks written for the two-step way (maker and checker, OTP on the pay bill) run with that choice made in
+  // Settings; `simple.simple.spec.ts` runs last, switches to the simple way — the default — and checks it.
+  const after = new pg.Client({ connectionString: url });
+  await after.connect();
+  await after.query(
+    `INSERT INTO "Setting" ("boardId", "key", "value", "updatedAt") SELECT id, 'workflow', '{"mode":"twoStep"}'::jsonb, now() FROM "Board"
+     ON CONFLICT ("boardId", "key") DO UPDATE SET "value" = EXCLUDED."value"`,
+  );
+  await after.end();
 }

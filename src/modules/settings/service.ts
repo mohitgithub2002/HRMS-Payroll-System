@@ -28,14 +28,13 @@ export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, 
   // How work is approved is the Board's own decision: its Admin may always change it.
   if (!canManageUsers(actor) && !(key === "workflow" && isFullAdmin(actor))) throw forbidden();
   const parsed = settingsSchemas[key].parse(value) as SettingValue<K>;
-  return db.$transaction(async (tx) => {
+  const saved = await db.$transaction(async (tx) => {
     const before = await getSetting(actor.boardId, key, tx);
     await tx.setting.upsert({
       where: { boardId_key: { boardId: actor.boardId, key } },
       create: { boardId: actor.boardId, key, value: parsed as Prisma.InputJsonValue, updatedById: actor.userId },
       update: { value: parsed as Prisma.InputJsonValue, updatedById: actor.userId },
     });
-    if (key === "workflow") forgetWorkflow(actor.boardId);
     const changes = diff(before as Record<string, unknown>, parsed as Record<string, unknown>);
     await audit(tx, { ...actor, name: actor.name }, {
       action: "UPDATE",
@@ -48,4 +47,7 @@ export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, 
     });
     return parsed;
   });
+  // Everyone's rights and wording follow this choice from their next screen.
+  if (key === "workflow") forgetWorkflow(actor.boardId);
+  return saved;
 }

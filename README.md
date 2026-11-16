@@ -55,6 +55,21 @@ All demo logins use the password **`Dcb@2026`**. With `SMS_PROVIDER=console` the
 
 Employees and pensioners can also choose **"With mobile OTP only"**.
 
+### Two ways of working
+
+**Settings → How work is approved** (the Admin changes it; the demo starts on Simple):
+
+- **Simple** — the default. Three desks, each working alone: the **Admin** (`DCB10002`) sees and manages everything;
+  the **HR manager** (`DCB10003`) hires and manages employees, attendance and leave and decides every request about
+  them; the **Accounts manager** (`DCB10004`) works out and pays salaries in three steps — *Work out → Review → Pay* —
+  and looks after loans, arrears, tax and pension. What they enter counts at once. The Users screen gives each person a
+  role (Admin, HR manager, Accounts manager, HR and Accounts manager, IT support, Employee, Section head).
+- **Two steps** — every entry is checked by a second person (a Checker, then an Admin where the PRD asks) and the pay
+  bill goes through five stages and is signed by an Admin with an OTP. The "things to try" below marked *two steps*
+  need this choice.
+
+A role is only a name for a set of the same permissions, so switching either way changes no user.
+
 **Things to try in the demo:** Rajesh (`DCB10008`) has a missed-punch request and a CL application from Suresh waiting, and last month's Health attendance to lock (an unexplained day can be treated as leave); Anil (`DCB10001`, Admin) has a 5-day EL application from Pooja; Suresh (`DCB10010`) can apply for leave with a live balance; Neha (`DCB10007`) sees today's attendance board, the month register and the punch import; the holiday calendar is under Attendance → Holiday calendar. Every write goes to a second person (Checker or Admin) — sign in as `DCB10006` to check.
 
 **Payroll (Module 6):** sign in as Mohit (`DCB10004`, HR & Accounts → Payroll) and run this month's payroll for a pay group — the last two months are already closed, so the change against last month shows. Fix the exceptions (Health has not locked last month; Manoj has a one-off recovery), send it to the Checker (`DCB10006`), approve and sign it as Sunita (`DCB10002`, Admin — the OTP shows on screen in demo mode), make the bank file, release it as Anil (`DCB10001`), then read a return file and close the month. Rates, pay heads and the pay matrix are under Payroll → Rates and rules (HR proposes, an Admin approves); standing deductions per person are under Payroll → Pay items (a Checker checks).

@@ -1,7 +1,7 @@
 import "server-only";
 import { approveDirectly } from "@/lib/approvals/engine";
 import { audit } from "@/lib/audit";
-import { canAll } from "@/lib/auth/access";
+import { canAll, isFullAdmin } from "@/lib/auth/access";
 import type { Actor } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isMonth, todayIST } from "@/lib/dates";
@@ -96,7 +96,17 @@ export async function payRun(actor: Actor, runId: string) {
   }
   // The bank file is built and released at once: its release marks the bill as paid (the usual hook).
   const existing = before.bankFileId ? await db.fileRecord.findUnique({ where: { id: before.bankFileId } }) : null;
-  const file = existing && existing.status !== "REJECTED" ? existing : await buildSalaryBankFile(actor, runId);
+  let waiting = existing && existing.status !== "REJECTED" ? existing : null;
+  if (waiting && waiting.status === "PREVIEW" && waiting.createdById !== actor.userId && !isFullAdmin(actor)) {
+    // A file somebody else built in the two-step way and nobody released: this person's own takes its place.
+    const stale = waiting.id;
+    await db.$transaction(async (tx) => {
+      await tx.fileRecord.update({ where: { id: stale }, data: { status: "REJECTED" } });
+      await tx.approvalTask.updateMany({ where: { entityType: "FileRecord", entityId: stale, status: "PENDING" }, data: { status: "CANCELLED", decidedAt: new Date() } });
+    });
+    waiting = null;
+  }
+  const file = waiting ?? (await buildSalaryBankFile(actor, runId));
   const task = await db.approvalTask.findFirst({ where: { boardId: actor.boardId, entityType: "FileRecord", entityId: file.id, status: "PENDING" }, select: { id: true } });
   if (task) await approveDirectly(actor, [task.id]);
   return { id: runId, bankFileId: file.id };

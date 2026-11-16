@@ -17,7 +17,7 @@ import { tDynamic } from "@/lib/i18n";
 import { getT } from "@/lib/i18n/server";
 import { formatINR } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { STAGE_KEYS, STATUS_TONE, stageIndex } from "@/modules/payroll/present";
+import { SIMPLE_STAGE_KEYS, simpleStageIndex, STAGE_KEYS, STATUS_TONE, stageIndex } from "@/modules/payroll/present";
 import { pensionOverview } from "@/modules/pension/overview";
 import { MonthNav } from "../attendance/_components/month-nav";
 import { RunButton } from "../payroll/run-button";
@@ -33,7 +33,9 @@ export default async function PensionPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const data = await pensionOverview(actor, sp.month);
   const thisMonth = todayIST().slice(0, 7);
-  const steps = STAGE_KEYS.map((k) => t(`payroll.stages.${k}`));
+  // The simple way of working: work out, review, pay (the bill's own screen has the buttons).
+  const steps = actor.simple ? SIMPLE_STAGE_KEYS.map((k) => t(`easy.payroll.steps.${k}`)) : STAGE_KEYS.map((k) => t(`payroll.stages.${k}`));
+  const stageOf = actor.simple ? simpleStageIndex : stageIndex;
   const r = data.regular;
   const s = data.stats;
   const lcTone = s.held ? "red" : s.overdue ? "red" : s.dueSoon ? "amber" : "green";
@@ -79,7 +81,7 @@ export default async function PensionPage({ searchParams }: { searchParams: Prom
         />
         <CardBody className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="space-y-4">
-            <Stepper steps={steps} current={stageIndex(r?.status ?? null)} label={t("pension.title")} compact />
+            <Stepper steps={steps} current={stageOf(r?.status ?? null)} label={t("pension.title")} compact />
             {r ? (
               <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div>

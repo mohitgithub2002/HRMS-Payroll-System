@@ -8,7 +8,7 @@ import { AppError, RateLimitError, badRequest, forbidden, unauthorized } from "@
 import { makeT, type TKey } from "@/lib/i18n";
 import { lookup } from "@/lib/i18n/types";
 import { en } from "@/lib/i18n/en";
-import { getLocale } from "@/lib/i18n/server";
+import { getLocale, getSimple } from "@/lib/i18n/server";
 import { hit, LIMITS, type Limit } from "@/lib/rate-limit";
 import { getRequestMeta, type RequestMeta } from "@/lib/request-meta";
 
@@ -68,7 +68,7 @@ function zodToAppError(error: ZodError): AppError {
 }
 
 async function toErrorResponse(error: unknown) {
-  const t = makeT(await getLocale().catch(() => "en" as const));
+  const t = makeT(await getLocale().catch(() => "en" as const), await getSimple());
   const appError = error instanceof ZodError ? zodToAppError(error) : error instanceof AppError ? error : null;
   if (!appError) {
     console.error("[api] unexpected error", error);

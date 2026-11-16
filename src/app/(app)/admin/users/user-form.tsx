@@ -302,7 +302,7 @@ export function UserForm({ mode, initial, readOnly, isSelf, simple = false }: { 
           </button>
         </p>
       )}
-      {!pickRole && <Card>
+      <Card className={pickRole ? "hidden" : undefined}>
         <CardHeader title={t("users.permissionsFor", { login: tDynamic(t, `loginType.${loginType}`) })} icon={<ShieldCheck className="size-4.5" aria-hidden="true" />} />
         <CardBody className="space-y-3">
           {allowed.length === 0 ? (
@@ -329,7 +329,7 @@ export function UserForm({ mode, initial, readOnly, isSelf, simple = false }: { 
             </p>
           )}
         </CardBody>
-      </Card>}
+      </Card>
       {pickRole && currentRole === "OFFICER" && (
         <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
           {employee ? t("users.sectionScopeHint", { section: locale === "hi" && employee.sectionHi ? employee.sectionHi : employee.section }) : t("users.sectionScopeNone")}

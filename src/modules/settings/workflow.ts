@@ -7,7 +7,10 @@ import { SETTING_DEFAULTS } from "./schema";
  * seconds. A change in Settings is forgotten here at once; a second server process follows within the same seconds.
  */
 const KEEP_MS = 5_000;
-const seen = new Map<string, { simple: boolean; at: number }>();
+// Pages and API routes are bundled apart and would each get their own copy of a module-level map, so a change saved
+// through the API would not be forgotten for the pages: the map lives on the process instead.
+const store = globalThis as unknown as { __dcbWorkflow?: Map<string, { simple: boolean; at: number }> };
+const seen = (store.__dcbWorkflow ??= new Map<string, { simple: boolean; at: number }>());
 
 export async function isSimpleWorkflow(boardId: string): Promise<boolean> {
   const hit = seen.get(boardId);

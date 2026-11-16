@@ -51,7 +51,7 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
             </span>
           </span>
         }
-        actions={<Badge tone="green">{tDynamic(t, `permission.${task.requiredPermission}`)}</Badge>}
+        actions={actor.simple ? undefined : <Badge tone="green">{tDynamic(t, `permission.${task.requiredPermission}`)}</Badge>}
       />
 
       <div className="grid gap-6">

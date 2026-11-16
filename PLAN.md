@@ -254,6 +254,16 @@ _Goal: a secure, bilingual shell that every later module plugs into._
 
 ---
 
+## The simple way of working (client request: "too complex — make it simple to use")
+One setting (Settings → How work is approved), **Simple by default**; the two-step way of the PRD stays as the other choice.
+- [x] W1 Three roles over the same permissions — **Admin** (sees and manages everything), **HR manager** (hires and manages employees, attendance, leave and every request about them), **Accounts manager** (payroll, loans, arrears, tax and funds, pension) — plus Employee, Section head and IT support (users and settings only, never pay)
+- [x] W2 What staff enter counts at once: no Checker, no Admin step, chains included; requests from employees go to the desk that owns them; only the Admin decides about their own pay
+- [x] W3 Payroll in three steps for the Accounts manager — **Work out** (every pay group with one button) → **Review** (each pre-check settled with one click: hold the pay or pay it) → **Pay** (approve and make the bank file in one step, download, "salaries reached — finish" sends payslips and closes). A bill can be taken back until the month is finished; failed credits keep the return file and re-pay file
+- [x] W4 Simple screens — Home with greeting, quick actions, "To do" and four figures; Admin menu in the order of the work (Employees, Hiring, Attendance and leave, Payroll, Pension, Reports, More); Users screen with a role choice; simple words wherever a screen spoke of a Checker (English and Hindi)
+- [x] W5 The two-step way is untouched and still tested; a Board can switch either way without changing its users
+
+---
+
 ## Open questions carried from the PRD (§18) — built as settings, not code
 - [ ] Headcount by type; number of pensioners / family pensioners
 - [ ] FoxPro version and current maintainer

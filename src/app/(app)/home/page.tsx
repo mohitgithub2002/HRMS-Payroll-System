@@ -85,8 +85,12 @@ export default async function HomePage() {
   if (actor.simple && actor.loginType !== "EMPLOYEE") {
     const quick = quickActions(actor);
     const role = roleOf(actor.loginType, actor.permissions);
-    const top = tiles.slice(0, 4);
-    const rest = tiles.slice(4);
+    // The four figures each desk looks at first; the others are under "More figures".
+    const first = role === "ACCOUNTS" ? ["approvalsWaiting", "payrollMonth", "payrollExceptions", "statutoryDue"] : role === "HR" ? ["approvalsWaiting", "leaveWaiting", "presentToday", "employeesCount"] : ["approvalsWaiting", "salaryCost", "employeesCount", "presentToday"];
+    const rank = (key: string) => (first.includes(key) ? first.indexOf(key) : first.length);
+    const ordered = [...tiles].sort((a, b) => rank(a.key) - rank(b.key));
+    const top = ordered.slice(0, 4);
+    const rest = ordered.slice(4);
     return (
       <div className="space-y-6">
         <section className="brand-gradient relative overflow-hidden rounded-3xl px-6 py-7 text-white shadow-raised sm:px-8 sm:py-9">

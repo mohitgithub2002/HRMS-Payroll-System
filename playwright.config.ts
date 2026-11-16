@@ -32,7 +32,9 @@ export default defineConfig({
         env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL ?? "", APP_URL: `http://localhost:${PORT}` } as Record<string, string>,
       },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: /.*\.phone\.spec\.ts/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: [/.*\.phone\.spec\.ts/, /.*\.simple\.spec\.ts/] },
     { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /.*\.phone\.spec\.ts/ },
+    // The simple way of working, checked after everything else (it changes the Board's setting while it runs).
+    { name: "simple", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testMatch: /.*\.simple\.spec\.ts/, dependencies: ["desktop", "phone"] },
   ],
 });

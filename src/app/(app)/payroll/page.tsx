@@ -22,6 +22,7 @@ import { payrollOverview } from "@/modules/payroll/run";
 import { MonthNav } from "../attendance/_components/month-nav";
 import { PayrollTabs } from "./_components/payroll-tabs";
 import { RunButton } from "./run-button";
+import { SimpleMonth } from "./simple-month";
 
 export const metadata: Metadata = { title: "Payroll" };
 
@@ -41,7 +42,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
     <div>
       <PageHeader
         title={t("payroll.title")}
-        description={t("payroll.subtitle")}
+        description={actor.simple ? t("easy.payroll.subtitle") : t("payroll.subtitle")}
         actions={
           (can(actor, "rates_rules", "view") || can(actor, "rates_rules", "create")) && (
             <LinkButton href="/admin/rates" variant="secondary" icon={<Scale className="size-4" />}>
@@ -56,6 +57,10 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         <MonthNav month={data.month} hrefFor={(m) => `/payroll?month=${m}`} maxMonth={thisMonth} locale={locale} labels={{ prev: t("payroll.prevMonth"), next: t("payroll.nextMonth") }} />
       </div>
 
+      {actor.simple ? (
+        <SimpleMonth data={data} locale={locale} t={t} />
+      ) : (
+        <>
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatTile label={t("payroll.monthNet")} value={formatINR(monthNet)} icon={<Wallet className="size-5" aria-hidden="true" />} hint={formatMonth(data.month, locale)} />
         <StatTile label={t("payroll.peoplePaid")} value={monthPeople} icon={<Users className="size-5" aria-hidden="true" />} tone="blue" />
@@ -178,6 +183,8 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
           </Table>
         )}
       </Card>
+        </>
+      )}
     </div>
   );
 }

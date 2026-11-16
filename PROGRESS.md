@@ -18,12 +18,81 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 | 9 | Pension | 🟢 Done & verified (rules and the PPO layout to confirm for DCB — PRD §10, §18) |
 | 10 | Reports, dashboards, migration & go-live | 🟢 Done & verified (go-live steps for the Board's IT cell in [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)) |
 | C | Client add-ons (DCB review: one-screen view, suspension & full and final settlement, arrears by days, DA & TA by year, scanned service books, Excel bank file, document types) | 🟢 Done & verified (subsistence allowance and document list to confirm with DCB) |
+| W | The simple way of working (client request: simple roles, direct entries, payroll in three steps) | 🟢 Done & verified (the Board chooses Simple or Two steps in Settings; Simple is the default) |
 
 🟢 Done & verified · 🟡 In progress · ⚪ Pending
 
 ---
 
 ## Change log (newest first)
+
+### 2026-11-16 — The simple way of working: three roles, entries that count at once, payroll in three steps ✅
+Asked by the client: "this is too complex … a very long and complicated process for the payroll and the salary
+distribution — make it simple; the account manager can do that directly, HR can hire and manage the employees, their
+leaves and all approvals, the Admin can see and manage all things; simple for non-technical people, and premium."
+
+**Decided**
+- The long process was the PRD's maker-checker (every entry to a Checker, many also to an Admin; the pay bill through
+  five stages with an OTP). It is kept — some Boards' audit asks for it — but as a choice: **Settings → How work is
+  approved → Simple / Two steps**. **Simple is the default**, also for copies already installed. Nothing in the pay
+  engine, the bills, the prints, the bank file or the books differs between the two; only who presses the buttons.
+- Roles are names for sets of the existing permissions (Admin = Approver + Pay bill signer; HR manager = HR; Accounts
+  manager = Payroll + Pension; IT support = User & settings manager; Section head = Reporting officer), so no user has
+  to be changed to switch either way and there is no database migration.
+- One control is kept in the simple way: nobody but the Admin enters or decides anything about their own pay.
+
+**Built**
+- **Rights:** in the simple way the Admin has every right on every function; the HR manager every right on employees,
+  service book, hiring, attendance and leave; the Accounts manager every right on payroll, arrears and loans, tax and
+  funds, pension and rates. IT support still never sees pay, bank or Aadhaar. Employees and section heads as before.
+- **Entries count at once:** after each request, what the person sent for approval and may decide themselves is
+  approved there and then — the second and third steps of a chain too (a promotion in the service book, a loan, a
+  suspension, a bank change HR approved). If a check that only runs at approval fails, the entry is withdrawn and the
+  reason is shown. The message says "Saved. It applies right away." Requests from employees (leave, missed punch,
+  change of address or bank, tax declaration, life certificate) wait for the desk that owns them — HR or Accounts —
+  under "Requests to decide"; a rate change proposed by HR waits for Accounts.
+- **Payroll for the Accounts manager** (Payroll → This month): a large card says where the month stands and offers
+  the one next step. *Work out salaries* runs every pay group. Each pre-check (attendance not locked, net pay changed
+  by over 25%, no bank account …) has its own buttons — *Hold this pay* / *It is fine — pay* / *Pay without waiting*.
+  *Approve and pay* asks once ("24 people will be paid ₹…"), approves the bills and makes the bank files, ready to
+  download. *Finish the month* records that the money reached everyone, sends the payslips (SMS and email) and closes
+  the bills with their accounting summaries. Until then a bill can be *taken back* (loan and GPF postings undone, the
+  bank file cancelled). Failed payments: upload the bank's return file, then one button makes the new bank file.
+  Pension bills use the same card. Earlier months are listed one line each.
+- **Screens:** Home for the Admin and the managers — greeting with the role, up to six quick actions (Run payroll, Add
+  an employee, Decide leave, Attendance, Hiring, Payslips …), "To do", four figures and the rest under "More figures".
+  The Admin's menu follows the work: Home · Employees · Hiring · Attendance and leave · Payroll · Pension · Reports ·
+  More (requests, tax and funds, users and roles, rates, settings, migration, audit trail). The HR manager's menu has
+  no pay screens; the Accounts manager's no hiring. Users: pick a role from cards with one line each; the list shows
+  the role. Simple words in English and Hindi on every hint and button that spoke of a Checker, an Admin step or
+  "proposing" (about 90 lines; the two-step wording is unchanged).
+
+**Fixed while verifying**
+- The setting was remembered separately by the pages and the API in the production build, so the menu followed a
+  change only after a few seconds; it is now remembered once per server process and forgotten when saved.
+- A second step opened while the first was being approved was not followed (found by the promotion test).
+- An older test of the yearly GPF cap failed from November to March (₹90,000 a month no longer crossed ₹5 lakh in the
+  months left); it now uses an amount over the cap in any month.
+
+**Verified** — typecheck, lint, 430 unit / integration tests (new: every right of each role in the simple way and that
+the two-step matrix is unchanged; whose desk each of the 45 kinds of approval is; menus; roles; the simple wording has
+the same keys and values in both languages; on a real database: a promotion through both steps at once and waiting in
+the two-step way; an employee's bank change decided by HR alone; a rate change by HR waiting for Accounts; own pay
+refused for all but the Admin; a month worked out, paid, taken back, paid again and finished by the Accounts manager,
+refused in the two-step way and for HR), production build, 63 browser checks — the 59 earlier ones with "Two steps"
+chosen, then 4 in the simple way: the Admin switches in Settings and gets every area; the Accounts manager works out
+the month, settles each check with one click, pays, downloads the bank file, takes a bill back, pays it again and
+finishes; the HR manager decides an employee's leave and adds an employee whose ID is there at once; the Admin gives
+a new login a role; the new screens pass the WCAG 2.1 AA scan and do not scroll sideways at 360 px. Screens looked at
+in English, Hindi and on a phone.
+
+**Still to do / to know**
+- The Vercel preview of this branch failed about 20 seconds in. The build's first step (`prisma migrate deploy`)
+  stops with "Connection url is empty" when a deployment has no `DATABASE_URL`; the production deployment has one.
+  To confirm in the Vercel build log, and to set the variables for Preview if previews are wanted.
+- Walked through in the simple way: payroll, employees, leave, users, settings. Pension cases, the full and final
+  settlement, loans and hiring use the same "counts at once" rule (covered by the engine tests) but were not each
+  walked through on screen in the simple way.
 
 ### 2026-10-29 — Back-dated promotion, MACP or increment: later increments are worked out again ✅
 **Fixed**

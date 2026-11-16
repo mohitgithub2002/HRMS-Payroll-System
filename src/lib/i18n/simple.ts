@@ -1,0 +1,208 @@
+/**
+ * Wording for the simple way of working (Settings → How work is approved → Simple). Only lines that would
+ * otherwise speak of a Checker, a second step or the five payroll stages are listed; everything else comes from
+ * en.ts / hi.ts. A unit test checks that every key here exists there, in both languages, with the same {values}.
+ */
+export const enSimple = {
+  nav: {
+    recruitment: "Hiring",
+    statutory: "Tax and funds",
+    approvals: "Requests to decide",
+    users: "Users and roles",
+    admin: "More",
+  },
+  loginType: { HR_ACCOUNTS: "HR and Accounts" },
+  adminHub: {
+    subtitle: "The rest of the Admin's tools: requests to decide, tax and funds, users and roles, rates and rules, settings, migration and the audit trail.",
+    users: "Logins and the role of each person.",
+    rates: "DA and other rates, pay heads, the pay matrix, tax and pension tables.",
+  },
+  approvals: { title: "Requests to decide", subtitle: "Requests from employees waiting for your decision, oldest first.", empty: "No request is waiting for you." },
+  home: { approvalsWaiting: "Requests to decide", payrollMonth: "Pay groups paid this month", payrollExceptions: "Payroll: things to decide" },
+  employees: {
+    exit: {
+      recordHelp: "Record it with the order. It applies when you save.",
+      reinstateHelp: "Record the reinstatement order. It applies when you save.",
+    },
+    edit: { subtitle: "Changes apply when you save. Old values are kept in the history.", noteLabel: "Note (kept in the history)", submit: "Save changes" },
+    create: { subtitle: "Fill in the details. The Employee ID is issued when you save.", submit: "Save employee", reviewHint: "Look over the details once before saving." },
+    bulk: { submit: "Add {count} employees" },
+    serviceBook: { needsApprover: "The entry goes into the service book when you save." },
+  },
+  my: { bankNote: "Salary goes to the new account once HR approves it." },
+  recruitment: {
+    newVacancySubtitle: "A vacancy can only be made against a vacant sanctioned post.",
+    sendToAdmin: "Approve the vacancy",
+    submitSelection: "Approve the selection list",
+    files: { subtitle: "Data files for registering new joiners (PRAN, EPF, ESIC), ready to download when built." },
+  },
+  attendance: {
+    register: { editHint: "Tap a day to change it. Changes count when you save.", noteLabel: "Note", send: "Save {count} changes" },
+    holidays: { send: "Save calendar" },
+    lock: {
+      reopenHint: "The month opens again when you save. Once payroll has used the month it cannot be reopened.",
+      confirm: "Lock {section} for {month}? Days cannot change afterwards unless the month is reopened.",
+    },
+  },
+  leave: {
+    applySubtitle: "Your section head or the HR manager decides.",
+    preview: { decider: { APPROVER: "The HR manager decides.", CHECKER: "The HR manager decides." } },
+    enter: { hint: "For staff who do not use the system. The balance changes when you save.", send: "Save leave" },
+    opening: { hint: "Load each person's balances from the old system or the paper leave account, as on the start date. They count when you save.", send: "Save balances of {count} people" },
+    rules: { hint: "Central rules by default — change them to the Board's own. A change takes effect when you save.", change: "Change" },
+  },
+  payroll: {
+    settlement: { live: "Worked out now from the records. It is fixed when you save it.", noteForChecker: "Note", submit: "Approve the settlement" },
+    tabs: { runs: "This month", items: "Allowances and deductions", increments: "Increments and promotions", arrears: "Arrears and extra bills" },
+    status: { DRAFT: "To review", CHECKING: "Waiting for a second check", APPROVING: "Waiting for a second check", APPROVED: "Approved", PAID: "Sent to the bank", CLOSED: "Paid" },
+    tabsRun: { exceptions: "To decide", heads: "Totals" },
+    exceptions: {
+      title: "Things to decide before paying",
+      none: "Nothing to decide — every person's pay passed the checks.",
+      resolutionHelp: { EXPLAINED: "The pay is right; your remark says why." },
+      remarkHelp: "Write what you checked — it is kept in the audit trail.",
+      fix: { NO_BANK: "Add the bank account on the employee record, then work the payroll out again." },
+    },
+    actions: { failedHelp: "Correct the bank account on the person's record, then make a new bank file." },
+    items: { subtitle: "Standing allowances and deductions for one person — licence fee, society dues, GPF subscription and more. A change counts when you save." },
+    increments: { subtitle: "Yearly increments on 1 January and 1 July, and the new pay on promotion or MACP.", send: "Give {count} increment(s)" },
+    fixation: { help: "Choose the person, the new level and the option they chose. The rule and every figure show before you save.", send: "Save the new pay" },
+    supplementary: { made: "Extra bill made. Review it and pay it." },
+    loans: { sanctionHelp: "Recovery starts in the payroll of the start month.", send: "Sanction the loan" },
+    errors: { notDraft: "This bill is already approved. Take it back first to change it." },
+  },
+  rates: {
+    subtitle: "Pay matrix, DA, HRA, TA, statutory rates and pay heads — each with the date it starts.",
+    pension: { help: "Factor by age next birthday on the day after retirement (CCS (Commutation of Pension) Rules). A new table takes effect from its date.", proposeHelp: "Change the factors as in the order.", propose: "Add a new table" },
+    propose: "Change",
+    heads: { edit: "Change" },
+  },
+  users: { title: "Users and roles", subtitle: "Create logins and choose each person's role.", linkEmployeeHint: "Links the login to the person's own employee record." },
+  statutory: {
+    files: { subtitle: "Monthly files for the CRA, EPFO and ESIC portals and the Board pension fund — made from approved pay bills." },
+    tax: { carryInHelp: "Salary and TDS of the year from the old system, or from a previous employer (Form 12B).", carryInSend: "Save" },
+    form16: { subtitle: "Part B generated from the year's pay bills, Part A imported from TRACES; then published to each person.", publish: "Publish" },
+    rules: { edit: "Change" },
+    gpf: {
+      interestHelp: "On each month's closing balance at the rates notified for the year; credited on 31 March.",
+      interestSend: "Credit the interest",
+      sanctionHelp: "Up to {advance} as an advance ({ap}% of the balance) or {withdrawal} as a withdrawal ({wp}%).",
+      send: "Sanction",
+    },
+  },
+  pension: {
+    bills: { notRunHelp: "Not worked out yet. It takes a few seconds; you can work it out again until it is paid." },
+    arrears: { made: "Arrears bill made. Review it and pay it." },
+    newPensioner: { help: "For a pensioner of the old system who is not on the rolls here yet.", send: "Save pensioner" },
+    edit: { help: "Only what you change is saved. The next bill uses it.", send: "Save changes" },
+    death: {
+      help: "The pension stops on the day of death. Family pension starts the next day. Anything paid for days after the death is recovered from the family pension.",
+      send: "Record the death",
+      inServiceHelp: "Pay stops after the day of death. A family pension case is started with the death gratuity and leave encashment.",
+    },
+    case: { newHelp: "Pick the person and the kind of case. Service, pay, leave and GPF come from the records.", benefitsMade: "Benefits bill made. Review it and pay it." },
+  },
+  files: { notApproved: "This file is not ready for download yet." },
+};
+
+export const hiSimple = {
+  nav: {
+    recruitment: "भर्ती",
+    statutory: "कर और निधि",
+    approvals: "निर्णय के लिए अनुरोध",
+    users: "उपयोगकर्ता और भूमिकाएँ",
+    admin: "और",
+  },
+  loginType: { HR_ACCOUNTS: "एचआर और लेखा" },
+  adminHub: {
+    subtitle: "एडमिन के बाकी साधन: निर्णय के लिए अनुरोध, कर और निधि, उपयोगकर्ता और भूमिकाएँ, दरें और नियम, सेटिंग, माइग्रेशन और ऑडिट ट्रेल।",
+    users: "लॉगिन और हर व्यक्ति की भूमिका।",
+    rates: "डीए और अन्य दरें, वेतन मद, वेतन मैट्रिक्स, कर और पेंशन तालिकाएँ।",
+  },
+  approvals: { title: "निर्णय के लिए अनुरोध", subtitle: "कर्मचारियों के अनुरोध जो आपके निर्णय की प्रतीक्षा में हैं, सबसे पुराने पहले।", empty: "आपके लिए कोई अनुरोध प्रतीक्षा में नहीं है।" },
+  home: { approvalsWaiting: "निर्णय के लिए अनुरोध", payrollMonth: "इस माह चुकाए गए वेतन समूह", payrollExceptions: "वेतन: निर्णय बाकी" },
+  employees: {
+    exit: {
+      recordHelp: "आदेश के साथ दर्ज करें। सहेजते ही यह लागू होता है।",
+      reinstateHelp: "बहाली का आदेश दर्ज करें। सहेजते ही यह लागू होता है।",
+    },
+    edit: { subtitle: "सहेजते ही बदलाव लागू होते हैं। पुराने मान इतिहास में रखे जाते हैं।", noteLabel: "टिप्पणी (इतिहास में रहती है)", submit: "बदलाव सहेजें" },
+    create: { subtitle: "विवरण भरें। सहेजते ही कर्मचारी आईडी जारी होती है।", submit: "कर्मचारी सहेजें", reviewHint: "सहेजने से पहले विवरण एक बार देख लें।" },
+    bulk: { submit: "{count} कर्मचारी जोड़ें" },
+    serviceBook: { needsApprover: "सहेजते ही प्रविष्टि सेवा पुस्तिका में दर्ज होती है।" },
+  },
+  my: { bankNote: "एचआर की स्वीकृति के बाद वेतन नए खाते में जाता है।" },
+  recruitment: {
+    newVacancySubtitle: "रिक्ति केवल रिक्त स्वीकृत पद के विरुद्ध बनाई जा सकती है।",
+    sendToAdmin: "रिक्ति स्वीकृत करें",
+    submitSelection: "चयन सूची स्वीकृत करें",
+    files: { subtitle: "नए कार्यग्रहण करने वालों के पंजीकरण की डेटा फ़ाइलें (PRAN, EPF, ESIC), बनते ही डाउनलोड के लिए तैयार।" },
+  },
+  attendance: {
+    register: { editHint: "दिन बदलने के लिए उस पर टैप करें। सहेजते ही बदलाव गिने जाते हैं।", noteLabel: "टिप्पणी", send: "{count} बदलाव सहेजें" },
+    holidays: { send: "कैलेंडर सहेजें" },
+    lock: {
+      reopenHint: "सहेजते ही माह फिर से खुल जाता है। वेतन में उपयोग हो चुका माह फिर नहीं खुल सकता।",
+      confirm: "{month} के लिए {section} लॉक करें? इसके बाद दिन तभी बदलेंगे जब माह फिर से खोला जाए।",
+    },
+  },
+  leave: {
+    applySubtitle: "आपके अनुभाग प्रमुख या एचआर प्रबंधक निर्णय लेते हैं।",
+    preview: { decider: { APPROVER: "एचआर प्रबंधक निर्णय लेते हैं।", CHECKER: "एचआर प्रबंधक निर्णय लेते हैं।" } },
+    enter: { hint: "उन कर्मचारियों के लिए जो प्रणाली का उपयोग नहीं करते। सहेजते ही शेष बदलता है।", send: "अवकाश सहेजें" },
+    opening: { hint: "हर व्यक्ति का शेष पुरानी प्रणाली या काग़ज़ी अवकाश खाते से, आरंभ तिथि के अनुसार भरें। सहेजते ही वे गिने जाते हैं।", send: "{count} लोगों का शेष सहेजें" },
+    rules: { hint: "डिफ़ॉल्ट रूप से केंद्रीय नियम — इन्हें परिषद के अपने नियमों से बदलें। सहेजते ही बदलाव लागू होता है।", change: "बदलें" },
+  },
+  payroll: {
+    settlement: { live: "अभी रिकॉर्ड से निकाला गया। सहेजने पर यह स्थिर हो जाता है।", noteForChecker: "टिप्पणी", submit: "निपटान स्वीकृत करें" },
+    tabs: { runs: "यह माह", items: "भत्ते और कटौतियाँ", increments: "वेतनवृद्धि और पदोन्नति", arrears: "बकाया और अतिरिक्त बिल" },
+    status: { DRAFT: "देखना बाकी", CHECKING: "दूसरी जाँच की प्रतीक्षा", APPROVING: "दूसरी जाँच की प्रतीक्षा", APPROVED: "स्वीकृत", PAID: "बैंक को भेजा गया", CLOSED: "भुगतान हो गया" },
+    tabsRun: { exceptions: "निर्णय बाकी", heads: "योग" },
+    exceptions: {
+      title: "भुगतान से पहले निर्णय की बातें",
+      none: "कोई निर्णय बाकी नहीं — हर व्यक्ति का वेतन जाँच में सही निकला।",
+      resolutionHelp: { EXPLAINED: "वेतन सही है; आपकी टिप्पणी कारण बताती है।" },
+      remarkHelp: "लिखें कि आपने क्या जाँचा — यह ऑडिट ट्रेल में रहता है।",
+      fix: { NO_BANK: "कर्मचारी रिकॉर्ड में बैंक खाता जोड़ें, फिर वेतन दोबारा निकालें।" },
+    },
+    actions: { failedHelp: "व्यक्ति के रिकॉर्ड में बैंक खाता ठीक करें, फिर नई बैंक फ़ाइल बनाएँ।" },
+    items: { subtitle: "एक व्यक्ति के स्थायी भत्ते और कटौतियाँ — लाइसेंस शुल्क, सोसाइटी देय, जीपीएफ अंशदान आदि। सहेजते ही बदलाव गिना जाता है।" },
+    increments: { subtitle: "1 जनवरी और 1 जुलाई की वार्षिक वेतनवृद्धि, और पदोन्नति या एमएसीपी पर नया वेतन।", send: "{count} वेतनवृद्धि दें" },
+    fixation: { help: "व्यक्ति, नया लेवल और उनका चुना विकल्प चुनें। सहेजने से पहले नियम और हर आँकड़ा दिखता है।", send: "नया वेतन सहेजें" },
+    supplementary: { made: "अतिरिक्त बिल बना। इसे देखें और भुगतान करें।" },
+    loans: { sanctionHelp: "वसूली आरंभ माह के वेतन से शुरू होती है।", send: "ऋण स्वीकृत करें" },
+    errors: { notDraft: "यह बिल पहले ही स्वीकृत है। बदलने के लिए पहले इसे वापस लें।" },
+  },
+  rates: {
+    subtitle: "वेतन मैट्रिक्स, डीए, एचआरए, टीए, सांविधिक दरें और वेतन मद — हर एक अपनी आरंभ तिथि के साथ।",
+    pension: { help: "सेवानिवृत्ति के अगले दिन अगले जन्मदिन की आयु के अनुसार गुणक (CCS (पेंशन संराशीकरण) नियम)। नई तालिका अपनी तिथि से लागू होती है।", proposeHelp: "आदेश के अनुसार गुणक बदलें।", propose: "नई तालिका जोड़ें" },
+    propose: "बदलें",
+    heads: { edit: "बदलें" },
+  },
+  users: { title: "उपयोगकर्ता और भूमिकाएँ", subtitle: "लॉगिन बनाएँ और हर व्यक्ति की भूमिका चुनें।", linkEmployeeHint: "लॉगिन को व्यक्ति के अपने कर्मचारी रिकॉर्ड से जोड़ता है।" },
+  statutory: {
+    files: { subtitle: "CRA, EPFO और ESIC पोर्टल तथा परिषद पेंशन निधि की मासिक फ़ाइलें — स्वीकृत वेतन बिलों से बनी।" },
+    tax: { carryInHelp: "पुरानी प्रणाली से, या पिछले नियोक्ता (फ़ॉर्म 12B) से वर्ष का वेतन और टीडीएस।", carryInSend: "सहेजें" },
+    form16: { subtitle: "भाग B वर्ष के वेतन बिलों से बनता है, भाग A TRACES से आयात होता है; फिर हर व्यक्ति को प्रकाशित किया जाता है।", publish: "प्रकाशित करें" },
+    rules: { edit: "बदलें" },
+    gpf: {
+      interestHelp: "वर्ष की अधिसूचित दरों पर हर माह के अंतिम शेष पर; 31 मार्च को जमा।",
+      interestSend: "ब्याज जमा करें",
+      sanctionHelp: "अग्रिम के रूप में {advance} तक (शेष का {ap}%) या निकासी के रूप में {withdrawal} तक ({wp}%)।",
+      send: "स्वीकृत करें",
+    },
+  },
+  pension: {
+    bills: { notRunHelp: "अभी नहीं निकाला गया। इसमें कुछ सेकंड लगते हैं; भुगतान होने तक इसे दोबारा निकाला जा सकता है।" },
+    arrears: { made: "बकाया बिल बना। इसे देखें और भुगतान करें।" },
+    newPensioner: { help: "पुरानी प्रणाली के उस पेंशनभोगी के लिए जो अभी यहाँ दर्ज नहीं है।", send: "पेंशनभोगी सहेजें" },
+    edit: { help: "केवल वही सहेजा जाता है जो आप बदलते हैं। अगला बिल उसी का उपयोग करता है।", send: "बदलाव सहेजें" },
+    death: {
+      help: "मृत्यु के दिन पेंशन रुक जाती है। अगले दिन से पारिवारिक पेंशन शुरू होती है। मृत्यु के बाद के दिनों का भुगतान पारिवारिक पेंशन से वसूल होता है।",
+      send: "मृत्यु दर्ज करें",
+      inServiceHelp: "मृत्यु के दिन के बाद वेतन रुक जाता है। मृत्यु उपदान और अवकाश नकदीकरण के साथ पारिवारिक पेंशन का मामला शुरू होता है।",
+    },
+    case: { newHelp: "व्यक्ति और मामले का प्रकार चुनें। सेवा, वेतन, अवकाश और जीपीएफ रिकॉर्ड से आते हैं।", benefitsMade: "लाभ बिल बना। इसे देखें और भुगतान करें।" },
+  },
+  files: { notApproved: "यह फ़ाइल अभी डाउनलोड के लिए तैयार नहीं है।" },
+};

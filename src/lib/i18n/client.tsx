@@ -6,8 +6,8 @@ import type { Locale } from "./types";
 
 const I18nContext = createContext<{ locale: Locale; t: TFunction } | null>(null);
 
-export function I18nProvider({ locale, children }: { locale: Locale; children: React.ReactNode }) {
-  const value = useMemo(() => ({ locale, t: makeT(locale) }), [locale]);
+export function I18nProvider({ locale, simple = false, children }: { locale: Locale; simple?: boolean; children: React.ReactNode }) {
+  const value = useMemo(() => ({ locale, t: makeT(locale, simple) }), [locale, simple]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

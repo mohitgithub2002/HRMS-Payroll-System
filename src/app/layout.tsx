@@ -7,7 +7,7 @@ import "@fontsource/noto-sans-devanagari/700.css";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/lib/i18n/client";
-import { getLocale } from "@/lib/i18n/server";
+import { getLocale, getSimple } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: { default: "DCB HRMS & Payroll", template: "%s · DCB HRMS" },
@@ -23,11 +23,11 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale();
+  const [locale, simple] = await Promise.all([getLocale(), getSimple()]);
   return (
     <html lang={locale}>
       <body className="min-h-dvh">
-        <I18nProvider locale={locale}>
+        <I18nProvider locale={locale} simple={simple}>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>
       </body>

@@ -189,7 +189,7 @@ export async function pensionerProfile(actor: Actor, id: string) {
     slips: slips.map((s) => ({ id: s.id, month: s.month, kind: s.run.kind, status: s.status, runStatus: s.run.status, gross: num(s.gross), deductions: num(s.deductions), net: num(s.net), catchUp: ((s.detail ?? {}) as { catchUp?: { month: string }[] }).catchUp?.map((c) => c.month) ?? [] })),
     history: history.map((h) => ({ ...h, startDate: toISODate(h.startDate), endDate: h.endDate ? toISODate(h.endDate) : null })),
     recoveries: items.map((i) => ({ id: i.id, headCode: i.headCode, amount: num(i.amount), fromMonth: i.fromMonth, toMonth: i.toMonth, note: i.note })),
-    pending: pending.map(({ requiredPermission, makerId, deciderId, ...t }) => ({ ...t, createdAt: t.createdAt.toISOString(), canOpen: canOpenTask(actor, { requiredPermission, makerId, deciderId }) })),
+    pending: pending.map(({ requiredPermission, makerId, deciderId, ...t }) => ({ ...t, createdAt: t.createdAt.toISOString(), canOpen: canOpenTask(actor, { kind: t.kind, requiredPermission, makerId, deciderId }) })),
     own,
     can: {
       manage: !own && canManagePension(actor),

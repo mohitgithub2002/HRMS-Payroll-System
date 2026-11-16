@@ -160,6 +160,34 @@ export interface Principal {
   isEmployee: boolean;
   /** True when the Employee login belongs to a pensioner (view starts the day after retirement). */
   isPensioner: boolean;
+  /**
+   * The Board works the simple way (Settings → How work is approved): the Admin sees and does everything, the HR
+   * manager decides everything about people and the Accounts manager everything about pay — no second person.
+   * Absent or false = the two-step matrix of PRD §14 above.
+   */
+  simple?: boolean;
+}
+
+/** The simple way: what each manager looks after, with every right (create, check, approve, sign, lock, view). */
+const ALL_FNS = Object.keys(ACCESS_MATRIX) as Fn[];
+export const HR_FNS: readonly Fn[] = ["employee_master", "service_book", "recruitment", "attendance", "leave"];
+export const ACCOUNTS_FNS: readonly Fn[] = ["payroll", "arrears_loans", "statutory", "pension", "rates_rules"];
+
+/** An Admin login that holds Approver is the Board's Admin; one with only "User & settings manager" is IT support. */
+export function isFullAdmin(p: Principal): boolean {
+  return p.loginType === "ADMIN" && p.permissions.includes("APPROVER");
+}
+
+/** In the simple way of working: the functions this login runs on its own. */
+export function ownFns(p: Principal): readonly Fn[] {
+  if (!p.simple) return [];
+  if (isFullAdmin(p)) return ALL_FNS;
+  if (p.loginType !== "HR_ACCOUNTS") return [];
+  const fns = new Set<Fn>();
+  if (p.permissions.includes("HR")) for (const f of HR_FNS) fns.add(f);
+  if (p.permissions.includes("PAYROLL")) for (const f of ACCOUNTS_FNS) fns.add(f);
+  if (p.permissions.includes("PENSION")) fns.add("pension");
+  return [...fns];
 }
 
 export function rolesOf(p: Principal): Role[] {
@@ -181,6 +209,7 @@ const SCOPE_RANK: Record<Scope, number> = { all: 3, section: 2, own: 1, system: 
  * "system" is only ever returned for the audit trail.
  */
 export function scopeFor(p: Principal, fn: Fn, action: Action): Scope | null {
+  if (ownFns(p).includes(fn)) return "all";
   let best: Scope | null = null;
   for (const role of rolesOf(p)) {
     for (const grant of ACCESS_MATRIX[fn][role] ?? []) {
@@ -205,14 +234,31 @@ export function canAll(p: Principal, fn: Fn, action: Action): boolean {
  * not on any screen and not in the audit trail.
  */
 export function canSeeSensitive(p: Principal): boolean {
-  return !p.permissions.includes("USER_SETTINGS_MANAGER");
+  // In the simple way the Board's Admin also looks after users and settings, and sees everything.
+  return !p.permissions.includes("USER_SETTINGS_MANAGER") || (Boolean(p.simple) && isFullAdmin(p));
+}
+
+/**
+ * True when the login holds the permission — or, in the simple way of working, is the Board's Admin, who stands in
+ * for every desk (HR, Payroll, Pension, Checker, settings).
+ */
+export function holds(p: Principal, perm: Permission): boolean {
+  if (p.permissions.includes(perm)) return true;
+  return Boolean(p.simple) && isFullAdmin(p) && perm !== "REPORTING_OFFICER";
+}
+
+/** Who may add logins and change settings: the User & settings manager (and the Admin in the simple way). */
+export function canManageUsers(p: Principal): boolean {
+  return p.loginType === "ADMIN" && canAll(p, "users_settings", "create");
 }
 
 /**
  * Segregation of duties enforced when users are created: the settings manager cannot also approve or
  * sign pay, otherwise rule 3 could never hold for that person.
  */
-export function permissionConflicts(perms: readonly Permission[]): string | null {
+export function permissionConflicts(perms: readonly Permission[], simple = false): string | null {
+  // The simple way has one Admin who does everything, so there is nothing to keep apart.
+  if (simple) return null;
   const set = new Set(perms);
   if (set.has("USER_SETTINGS_MANAGER") && (set.has("APPROVER") || set.has("PAY_BILL_SIGNER"))) {
     return "settings_manager_conflict";

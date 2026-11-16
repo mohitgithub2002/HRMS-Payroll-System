@@ -10,6 +10,15 @@
   maker-checker through `lib/approvals`.
 - **Permissions:** `lib/auth/access.ts` is PRD §14 as data — never hard-code role checks in pages. Menus: `lib/auth/menu.ts` (≤ 8 items;
   the Admin's tools collapse into `/admin` — `adminTools()` — when they do not fit).
+- **Two ways of working** (Settings → How work is approved; `modules/settings/workflow.ts`, on the actor as `actor.simple`):
+  **Simple** (default) — the Admin sees and manages everything, the HR manager decides everything about people, the
+  Accounts manager works out and pays salaries; what staff enter counts at once (`approveDirectly` in the approvals
+  engine, run by `apiRoute` after each request; `lib/approvals/areas.ts` says whose desk each kind is). **Two steps** —
+  the PRD's maker-checker and OTP, untouched. Rights for both live in `access.ts` (`ownFns`, `holds`, `canManageUsers`);
+  roles are names for permission sets (`lib/auth/roles.ts`). Simple payroll is `payroll/simple.ts` (work out → review →
+  pay → finish) with its own panel on the shared run screen. Wording that differs is in `lib/i18n/simple.ts`
+  (overrides) and `easy.en.ts` / `easy.hi.ts` (new screens). Tests build actors without `simple`, i.e. two-step,
+  unless they set it; the browser checks run two-step first and `e2e/simple.simple.spec.ts` last.
 - **Text:** every visible string lives in `lib/i18n/en.ts` and `hi.ts` (same keys — a unit test enforces it). Simple words.
 - **Money:** `lib/money.ts` (paise maths, rupee rounding). **Dates:** `lib/dates.ts` (ISO strings, India time).
 - **Checks before commit:** `npm run typecheck && npm run lint && npm test && npm run build`; browser checks: `npm run test:e2e` (after a build — it rebuilds and seeds `E2E_DATABASE_URL` and starts its own server on :3100).

@@ -69,7 +69,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Pr
                 <RowLink key={task.id} href={`/approvals/${task.id}`}>
                   <Td>
                     <p className="font-medium text-ink-900">{title(task)}</p>
-                    <p className="mt-0.5 text-xs text-ink-500">{tDynamic(t, `permission.${task.requiredPermission}`)}</p>
+                    {!actor.simple && <p className="mt-0.5 text-xs text-ink-500">{tDynamic(t, `permission.${task.requiredPermission}`)}</p>}
                   </Td>
                   <Td className="whitespace-nowrap">{task.makerName}</Td>
                   <Td className="whitespace-nowrap text-ink-600">{formatDateTime(task.createdAt, locale)}</Td>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { LoginType, Permission } from "@/generated/prisma/enums";
 import { audit } from "@/lib/audit";
-import { can, permissionConflicts, PERMISSIONS_BY_LOGIN } from "@/lib/auth/access";
+import { can, canManageUsers, permissionConflicts, PERMISSIONS_BY_LOGIN } from "@/lib/auth/access";
 import { revokeAllSessions, type Actor } from "@/lib/auth/session";
 import { sendSms } from "@/lib/connectors/sms";
 import { db } from "@/lib/db";
@@ -35,14 +35,14 @@ function assertCanView(actor: Actor) {
   if (!can(actor, "users_settings", "view")) throw forbidden();
 }
 function assertCanEdit(actor: Actor) {
-  if (!actor.permissions.includes("USER_SETTINGS_MANAGER")) throw forbidden("users.readOnly");
+  if (!canManageUsers(actor)) throw forbidden("users.readOnly");
 }
 
-function validatePermissions(loginType: LoginType, perms: Permission[]) {
+function validatePermissions(loginType: LoginType, perms: Permission[], simple = false) {
   const allowed = new Set(PERMISSIONS_BY_LOGIN[loginType]);
   const bad = perms.filter((p) => !allowed.has(p));
   if (bad.length) throw badRequest("errors.validation", { permissions: "validation.invalid" });
-  if (permissionConflicts(perms)) throw badRequest("users.conflict", { permissions: "users.conflict" });
+  if (permissionConflicts(perms, simple)) throw badRequest("users.conflict", { permissions: "users.conflict" });
   return [...new Set(perms)];
 }
 
@@ -130,7 +130,7 @@ async function uniqueOrConflict<T>(work: () => Promise<T>) {
 
 export async function createUser(actor: Actor, input: UserCreateInput) {
   assertCanEdit(actor);
-  const permissions = validatePermissions(input.loginType, input.permissions);
+  const permissions = validatePermissions(input.loginType, input.permissions, actor.simple);
   const employee = await checkEmployee(actor, input.employeeId);
   if (input.loginType === "EMPLOYEE" && !employee) {
     throw badRequest("errors.validation", { employeeId: "validation.required" });
@@ -181,7 +181,7 @@ export async function updateUser(actor: Actor, id: string, input: UserUpdateInpu
   assertCanEdit(actor);
   const before = await db.user.findFirst({ where: { id, boardId: actor.boardId } });
   if (!before) throw notFound();
-  const permissions = validatePermissions(before.loginType, input.permissions);
+  const permissions = validatePermissions(before.loginType, input.permissions, actor.simple);
   const samePermissions = [...permissions].sort().join() === [...before.permissions].sort().join();
   if (id === actor.userId && !samePermissions) {
     // Nobody changes their own permissions — another settings manager must (maker-checker spirit).

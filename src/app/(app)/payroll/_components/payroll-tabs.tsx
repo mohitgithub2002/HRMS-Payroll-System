@@ -7,7 +7,7 @@ export type PayrollTab = "runs" | "items" | "increments" | "arrears" | "loans" |
 /** The areas of the payroll screen this person may open (S-40 to S-44). */
 export function payrollTabs(p: Principal): PayrollTab[] {
   const tabs: PayrollTab[] = ["runs"];
-  if (canAll(p, "payroll", "create") || p.permissions.includes("CHECKER")) tabs.push("items");
+  if (canAll(p, "payroll", "create") || canAll(p, "payroll", "check")) tabs.push("items");
   if (canAll(p, "payroll", "view") || canAll(p, "service_book", "create")) tabs.push("increments");
   if (canAll(p, "arrears_loans", "view")) tabs.push("arrears", "loans");
   if (canAll(p, "payroll", "view")) tabs.push("payslips");

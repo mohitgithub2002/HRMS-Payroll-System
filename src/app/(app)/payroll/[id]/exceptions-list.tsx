@@ -30,7 +30,7 @@ export interface ExceptionItem {
 }
 
 /** PR-10: each exception with what is wrong, how to fix it, and how it was resolved. */
-export function ExceptionsList({ runId, items, canResolve }: { runId: string; items: ExceptionItem[]; canResolve: boolean }) {
+export function ExceptionsList({ runId, items, canResolve, quick = false }: { runId: string; items: ExceptionItem[]; canResolve: boolean; quick?: boolean }) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const router = useRouter();
@@ -39,6 +39,7 @@ export function ExceptionsList({ runId, items, canResolve }: { runId: string; it
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   if (!items.length) {
     return (
@@ -86,6 +87,20 @@ export function ExceptionsList({ runId, items, canResolve }: { runId: string; it
     }
   }
 
+  /** The simple way of working: one click settles it, with a standard remark in the audit trail. */
+  async function settle(x: ExceptionItem, resolution: ExceptionItem["allowed"][number]) {
+    setBusyId(`${x.id}:${resolution}`);
+    const remark = resolution === "WITHHELD" ? t("easy.payroll.noteHold") : resolution === "WAIVED" ? t("easy.payroll.noteWaive") : t("easy.payroll.noteFine");
+    try {
+      await api(`/api/v1/payroll/runs/${runId}/exceptions/${x.id}`, { body: { resolution, note: remark } });
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : t("errors.generic"), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function undo(x: ExceptionItem) {
     try {
       await api(`/api/v1/payroll/runs/${runId}/exceptions/${x.id}`, { method: "DELETE" });
@@ -108,7 +123,7 @@ export function ExceptionsList({ runId, items, canResolve }: { runId: string; it
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-ink-900">{tDynamic(t, `payroll.exceptions.codes.${x.code}`)}</p>
-                  {!x.resolution && <Badge tone={block ? "red" : "amber"}>{block ? t("payroll.exceptions.blocking") : t("payroll.exceptions.warning")}</Badge>}
+                  {!x.resolution && !quick && <Badge tone={block ? "red" : "amber"}>{block ? t("payroll.exceptions.blocking") : t("payroll.exceptions.warning")}</Badge>}
                   {x.isSelf && <Badge tone="blue">{t("payroll.self")}</Badge>}
                 </div>
                 {x.person && (
@@ -136,6 +151,14 @@ export function ExceptionsList({ runId, items, canResolve }: { runId: string; it
                     <Button size="sm" variant="ghost" icon={<Undo2 className="size-4" />} onClick={() => undo(x)}>
                       {t("payroll.exceptions.undo")}
                     </Button>
+                  ) : quick ? (
+                    <div className="flex flex-wrap gap-2">
+                      {x.allowed.map((r) => (
+                        <Button key={r} size="sm" variant={r === "WITHHELD" ? "secondary" : "subtle"} loading={busyId === `${x.id}:${r}`} onClick={() => settle(x, r)} data-testid={`settle-${r}`}>
+                          {r === "WITHHELD" ? t("easy.payroll.hold") : r === "WAIVED" ? t("easy.payroll.payAnyway") : t("easy.payroll.payIt")}
+                        </Button>
+                      ))}
+                    </div>
                   ) : (
                     <Button size="sm" variant="secondary" onClick={() => start(x)}>
                       {t("payroll.exceptions.resolve")}

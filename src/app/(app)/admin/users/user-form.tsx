@@ -11,6 +11,8 @@ import { Checkbox, Input, controlClass } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { useToast } from "@/components/ui/toast";
 import { PERMISSIONS_BY_LOGIN, permissionConflicts } from "@/lib/auth/access";
+import { ROLE_DEFS, roleOf, rolesForLogin, SIMPLE_ROLES, type SimpleRole } from "@/lib/auth/roles";
+import { cn } from "@/lib/utils";
 import { ApiError, api } from "@/lib/http";
 import { tDynamic } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/client";
@@ -123,18 +125,28 @@ function EmployeePicker({ value, onChange, disabled }: { value: LinkedEmployee |
   );
 }
 
-export function UserForm({ mode, initial, readOnly, isSelf }: { mode: "create" | "edit"; initial?: Initial; readOnly?: boolean; isSelf?: boolean }) {
+export function UserForm({ mode, initial, readOnly, isSelf, simple = false }: { mode: "create" | "edit"; initial?: Initial; readOnly?: boolean; isSelf?: boolean; simple?: boolean }) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const [loginType, setLoginType] = useState<LoginType>(initial?.loginType ?? "HR_ACCOUNTS");
+  // The simple way of working: one role instead of a login type and ticked permissions.
+  const role = roleOf(loginType, initial?.permissions ?? []);
+  const [pickRole, setPickRole] = useState(simple && (mode === "create" || role !== "OTHER"));
   const [employee, setEmployee] = useState<LinkedEmployee | null>(initial?.employee ?? null);
   const [loginId, setLoginId] = useState(initial?.loginId ?? "");
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [displayNameHi, setDisplayNameHi] = useState(initial?.displayNameHi ?? "");
   const [mobile, setMobile] = useState(initial?.mobile ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
-  const [permissions, setPermissions] = useState<Permission[]>(initial?.permissions ?? []);
+  const [permissions, setPermissions] = useState<Permission[]>(initial?.permissions ?? (simple ? ROLE_DEFS.HR.permissions : []));
+  const currentRole = roleOf(loginType, permissions);
+  const roleChoices = mode === "create" ? SIMPLE_ROLES : rolesForLogin(loginType);
+
+  function chooseRole(r: SimpleRole) {
+    setLoginType(ROLE_DEFS[r].loginType);
+    setPermissions(ROLE_DEFS[r].permissions);
+  }
   const [tempPassword, setTempPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -142,7 +154,7 @@ export function UserForm({ mode, initial, readOnly, isSelf }: { mode: "create" |
   const [resetValue, setResetValue] = useState("");
 
   const allowed = PERMISSIONS_BY_LOGIN[loginType];
-  const conflict = useMemo(() => permissionConflicts(permissions), [permissions]);
+  const conflict = useMemo(() => permissionConflicts(permissions, simple), [permissions, simple]);
 
   function togglePermission(p: Permission, on: boolean) {
     setPermissions((all) => (on ? [...new Set([...all, p])] : all.filter((x) => x !== p)));
@@ -209,7 +221,30 @@ export function UserForm({ mode, initial, readOnly, isSelf }: { mode: "create" |
       <Card>
         <CardHeader title={t("users.loginType")} icon={<UserRound className="size-4.5" aria-hidden="true" />} />
         <CardBody className="space-y-5">
-          {mode === "create" ? (
+          {pickRole ? (
+            <fieldset>
+              <legend className="text-sm font-medium text-ink-800">{t("easy.roles.title")}</legend>
+              <p className="mt-0.5 text-xs text-ink-500">{t("easy.roles.help")}</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {roleChoices.map((r) => (
+                  <label key={r} className={cn("flex cursor-pointer gap-3 rounded-xl border px-4 py-3 transition-colors", currentRole === r ? "border-brand-500 bg-brand-50/60 ring-2 ring-brand-100" : "border-ink-200 hover:border-ink-300", (readOnly || isSelf) && "pointer-events-none opacity-70")}>
+                    <input type="radio" name="role" className="mt-1 accent-brand-700" checked={currentRole === r} disabled={readOnly || isSelf} onChange={() => chooseRole(r)} />
+                    <span>
+                      <span className="block text-sm font-semibold text-ink-900">{t(`easy.roles.${r}`)}</span>
+                      <span className="block text-sm text-ink-600">{t(`easy.roles.${r}_help`)}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {mode === "edit" && initial?.status && (
+                <div className="mt-3">
+                  <Badge tone={initial.status === "ACTIVE" ? "green" : "gray"} dot>
+                    {initial.status === "ACTIVE" ? t("common.active") : t("common.disabled")}
+                  </Badge>
+                </div>
+              )}
+            </fieldset>
+          ) : mode === "create" ? (
             <Segmented
               label={t("users.loginType")}
               value={loginType}
@@ -259,7 +294,15 @@ export function UserForm({ mode, initial, readOnly, isSelf }: { mode: "create" |
         </CardBody>
       </Card>
 
-      <Card>
+      {simple && !pickRole && (
+        <p className="text-sm text-ink-600">
+          {t("easy.roles.OTHER")} ·{" "}
+          <button type="button" className="font-medium text-brand-700 hover:underline" onClick={() => setPickRole(true)}>
+            {t("easy.roles.title")}
+          </button>
+        </p>
+      )}
+      <Card className={pickRole ? "hidden" : undefined}>
         <CardHeader title={t("users.permissionsFor", { login: tDynamic(t, `loginType.${loginType}`) })} icon={<ShieldCheck className="size-4.5" aria-hidden="true" />} />
         <CardBody className="space-y-3">
           {allowed.length === 0 ? (
@@ -287,6 +330,11 @@ export function UserForm({ mode, initial, readOnly, isSelf }: { mode: "create" |
           )}
         </CardBody>
       </Card>
+      {pickRole && currentRole === "OFFICER" && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
+          {employee ? t("users.sectionScopeHint", { section: locale === "hi" && employee.sectionHi ? employee.sectionHi : employee.section }) : t("users.sectionScopeNone")}
+        </p>
+      )}
 
       {mode === "create" && (
         <Card>

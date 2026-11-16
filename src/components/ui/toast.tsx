@@ -2,6 +2,8 @@
 
 import { CheckCircle2, AlertTriangle, Info, X, XCircle } from "lucide-react";
 import { createContext, useCallback, useContext, useState } from "react";
+import { takeApplied } from "@/lib/applied";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type ToastTone = "success" | "error" | "info" | "warning";
@@ -14,15 +16,18 @@ interface ToastItem {
 const ToastContext = createContext<((message: string, tone?: ToastTone) => void) | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [items, setItems] = useState<ToastItem[]>([]);
   const remove = useCallback((id: number) => setItems((all) => all.filter((t) => t.id !== id)), []);
   const push = useCallback(
     (message: string, tone: ToastTone = "success") => {
       const id = Date.now() + Math.random();
-      setItems((all) => [...all.slice(-3), { id, tone, message }]);
+      // The simple way of working: the entry counted at once, so "sent for approval" would be wrong.
+      const text = tone === "success" && takeApplied() ? t("common.appliedNow") : message;
+      setItems((all) => [...all.slice(-3), { id, tone, message: text }]);
       setTimeout(() => remove(id), tone === "error" ? 7000 : 4000);
     },
-    [remove],
+    [remove, t],
   );
   const icons = { success: CheckCircle2, error: XCircle, info: Info, warning: AlertTriangle };
   const colors = { success: "text-brand-600", error: "text-red-600", info: "text-sky-600", warning: "text-amber-600" };

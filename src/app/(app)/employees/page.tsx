@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { RowLink } from "@/components/ui/row-link";
 import { Table, Td, Th, THead } from "@/components/ui/table";
-import { canAll, scopeFor } from "@/lib/auth/access";
+import { canAll, holds, scopeFor } from "@/lib/auth/access";
 import { requireActor } from "@/lib/auth/session";
 import { formatDate, formatMonth } from "@/lib/dates";
 import { tDynamic } from "@/lib/i18n";
@@ -48,7 +48,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const showPay = canAll(actor, "payroll", "view");
   const pays = showPay ? await lastNetPays(actor, data.rows.map((r) => r.id)) : new Map<string, { month: string; net: number }>();
   const hr = canAll(actor, "employee_master", "create");
-  const isChecker = actor.permissions.includes("CHECKER");
+  const isChecker = holds(actor, "CHECKER") || canAll(actor, "employee_master", "check");
 
   return (
     <div>

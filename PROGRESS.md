@@ -79,7 +79,20 @@ the two-step matrix is unchanged; whose desk each of the 45 kinds of approval is
 the same keys and values in both languages; on a real database: a promotion through both steps at once and waiting in
 the two-step way; an employee's bank change decided by HR alone; a rate change by HR waiting for Accounts; own pay
 refused for all but the Admin; a month worked out, paid, taken back, paid again and finished by the Accounts manager,
-refused in the two-step way and for HR), production build, browser checks (see below).
+refused in the two-step way and for HR), production build, 63 browser checks — the 59 earlier ones with "Two steps"
+chosen, then 4 in the simple way: the Admin switches in Settings and gets every area; the Accounts manager works out
+the month, settles each check with one click, pays, downloads the bank file, takes a bill back, pays it again and
+finishes; the HR manager decides an employee's leave and adds an employee whose ID is there at once; the Admin gives
+a new login a role; the new screens pass the WCAG 2.1 AA scan and do not scroll sideways at 360 px. Screens looked at
+in English, Hindi and on a phone.
+
+**Still to do / to know**
+- The Vercel preview of this branch failed about 20 seconds in. The build's first step (`prisma migrate deploy`)
+  stops with "Connection url is empty" when a deployment has no `DATABASE_URL`; the production deployment has one.
+  To confirm in the Vercel build log, and to set the variables for Preview if previews are wanted.
+- Walked through in the simple way: payroll, employees, leave, users, settings. Pension cases, the full and final
+  settlement, loans and hiring use the same "counts at once" rule (covered by the engine tests) but were not each
+  walked through on screen in the simple way.
 
 ### 2026-10-29 — Back-dated promotion, MACP or increment: later increments are worked out again ✅
 **Fixed**

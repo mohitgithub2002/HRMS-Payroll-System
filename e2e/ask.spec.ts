@@ -122,7 +122,7 @@ test("the Admin writes a document, Ask quotes it, and the Admin decides who may 
   await page.goto("/admin/settings");
   const card = page.getByTestId("ask-card");
   await card.getByRole("radio", { name: /^Office staff/ }).check();
-  await card.getByRole("button", { name: "Save" }).click();
+  await card.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.").first()).toBeVisible();
   await signIn(page, { as: "Employee / Pensioner", id: "DCB10014" });
   await expect(page.getByTestId("ask-link")).toHaveCount(0);
@@ -135,7 +135,7 @@ test("the Admin writes a document, Ask quotes it, and the Admin decides who may 
   await signIn(page, { as: "Admin", id: "DCB10002" });
   await page.goto("/admin/settings");
   await page.getByTestId("ask-card").getByRole("radio", { name: /^Everyone/ }).check();
-  await page.getByTestId("ask-card").getByRole("button", { name: "Save" }).click();
+  await page.getByTestId("ask-card").getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.").first()).toBeVisible();
   await page.goto("/ask/documents");
   await page.getByRole("listitem").filter({ hasText: "Canteen timings" }).getByRole("button", { name: "Remove" }).click();
@@ -144,6 +144,61 @@ test("the Admin writes a document, Ask quotes it, and the Admin decides who may 
   // Every question was written to the audit trail.
   await page.goto("/admin/audit?q=Asked");
   await expect(page.getByText(/Asked: What is the order on canteen timings/).first()).toBeVisible();
+});
+
+test("the Admin chooses the AI service and sets its key; the key never comes back", async ({ page }) => {
+  await signIn(page, { as: "Admin", id: "DCB10002" });
+  await page.goto("/admin/settings");
+  const card = page.getByTestId("ask-card");
+  // Gemini is the service in use until the Board chooses another.
+  const gemini = card.getByTestId("ask-service-gemini");
+  const gpt = card.getByTestId("ask-service-openai");
+  await expect(gemini.getByRole("radio")).toBeChecked();
+  await expect(gemini.getByText("In use")).toBeVisible();
+  await expect(gemini.getByRole("textbox", { name: "Model" })).toHaveValue("gemini-3.8-flash");
+  await expect(gpt.getByRole("textbox", { name: "Model" })).toHaveValue("gpt-5.5");
+  await expect(card.getByTestId("ask-service-claude").getByRole("textbox", { name: "Model" })).toHaveValue("claude-opus-5-5");
+  await expect(card.getByTestId("ask-key-status-openai")).toHaveText("No key yet");
+  await expect(gpt.getByRole("button", { name: "Test" })).toBeDisabled();
+
+  // A key for GPT: saved, shown only by its last four characters, the field emptied.
+  await gpt.getByLabel("API key").fill("sk-browser-check-key-7788");
+  await gpt.getByRole("button", { name: "Save key" }).click();
+  await expect(card.getByTestId("ask-key-status-openai")).toHaveText("Key saved here, ending in …7788");
+  await expect(gpt.getByLabel("API key")).toHaveValue("");
+  const config = await page.request.get("/api/v1/ask/config");
+  expect(config.ok()).toBe(true);
+  expect(await config.text()).not.toContain("sk-browser-check-key");
+  expect((await page.request.get("/api/v1/settings/askKeys")).status()).toBe(404);
+  await page.reload();
+  await expect(page.getByTestId("ask-key-status-openai")).toHaveText("Key saved here, ending in …7788");
+  expect(await page.content()).not.toContain("sk-browser-check-key");
+
+  // Choose GPT with another model, save: it is the one in use.
+  await gpt.getByRole("radio").check();
+  await gpt.getByRole("textbox", { name: "Model" }).fill("gpt-5.5-pro");
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(gpt.getByText("In use")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("ask-service-openai").getByRole("radio")).toBeChecked();
+  await expect(page.getByTestId("ask-service-openai").getByRole("textbox", { name: "Model" })).toHaveValue("gpt-5.5-pro");
+
+  // Back to Gemini; the key is removed.
+  await page.getByTestId("ask-service-gemini").getByRole("radio").check();
+  await page.getByTestId("ask-service-openai").getByRole("textbox", { name: "Model" }).fill("gpt-5.5");
+  await page.getByTestId("ask-card").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByTestId("ask-service-gemini").getByText("In use")).toBeVisible();
+  await page.getByTestId("ask-service-openai").getByRole("button", { name: "Remove key" }).click();
+  await expect(page.getByTestId("ask-key-status-openai")).toHaveText("No key yet");
+  await page.goto("/admin/audit?q=key+for+Ask");
+  await expect(page.getByText("Set the GPT (OpenAI) key for Ask").first()).toBeVisible();
+  await expect(page.getByText("Removed the GPT (OpenAI) key for Ask").first()).toBeVisible();
+
+  // HR cannot read the configuration or set a key.
+  await signIn(page, { as: "HR & Accounts", id: "DCB10003" });
+  expect((await page.request.get("/api/v1/ask/config")).status()).toBe(403);
+  expect((await page.request.put("/api/v1/ask/keys/gemini", { data: { key: "AIza-not-allowed-0000" } })).status()).toBe(403);
+  expect((await page.request.post("/api/v1/ask/keys/gemini/test", { data: {} })).status()).toBe(403);
 });
 
 test("an employee cannot open the documents screen or its API", async ({ page }) => {

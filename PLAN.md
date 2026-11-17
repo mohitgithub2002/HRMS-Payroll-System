@@ -272,7 +272,8 @@ _Goal: a person asks in their own words and gets an answer from the records and 
 - [x] A4 Three walls: the guard (PostgreSQL's own parser, allowlists), a read-only database role that can read only the views, views that filter their rows from a short-lived pass — the last two hold even if the first were wrong (tested)
 - [x] A5 The Board's documents (policies, orders, circulars) as text with an audience each — everyone, office staff, Admin; written by the Admin (and the HR manager in the simple way); audited
 - [x] A6 Settings → Ask: off / office staff / everyone; every question in the audit trail with its statements (not the rows); 30 questions per person in 10 minutes
-- [~] A7 The language model: Claude through the Anthropic API (key in the environment); the adapter is tested against a local stand-in for the API — _a run with a real key is still to do (none was available while building)_
+- [x] A7 The AI service is the Board's choice in Settings → Ask: **Gemini (the default)**, GPT or Claude, each with its model name and its own API key — saved encrypted, never shown again, or taken from the server's environment; a Test button says whether the key and model work
+- [~] A7a Each service's adapter is tested through its official SDK against a local stand-in for the service — _a run with a real key is still to do (none was available while building): Settings → Ask → Test, then the suggested questions_
 - [ ] A8 The Board decides whether records may be sent to an AI service outside its servers (docs/DEPLOYMENT.md §13) before Ask is switched on in production
 
 ---

@@ -85,8 +85,9 @@ A role is only a name for a set of the same permissions, so switching either way
 section?" — in English or Hindi. The answer comes from the records and from the Board's own documents (Ask → The
 Board's documents), and only ever from what that login may already see: an employee gets their own record, a section
 head the section's attendance and leave, HR people but no pay, Accounts pay but nothing beyond its desk, IT support
-logins and system events only. It needs an AI service key on the server (`ANTHROPIC_API_KEY`); to try the access rules
-without one, set `ASK_AI_PROVIDER=scripted` in `.env` — Ask then answers a few fixed questions, and a line starting
+logins and system events only. The Admin chooses the AI service under Settings → Ask — **Gemini** (the default),
+**GPT** or **Claude** — and enters its API key there (saved encrypted; **Test** checks it). To try the access rules
+without a key, set `ASK_AI_PROVIDER=scripted` in `.env` — Ask then answers a few fixed questions, and a line starting
 with `sql:` runs a statement through the same checks. How access is kept, what is sent to the AI service and how to
 set it up: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) §13.
 

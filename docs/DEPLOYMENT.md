@@ -127,8 +127,7 @@ Copy `.env.example` to `/srv/dcb-hrms/.env`, owned by `dcbhrms`, mode `600`.
 | `TRUSTED_PROXY_HOPS` | `1` | Reverse proxies in front of the app that add to `X-Forwarded-For`. nginx alone = 1; a cloud load balancer + nginx = 2 |
 | `BOOTSTRAP_ADMIN_MOBILE` / `BOOTSTRAP_ADMIN_PASSWORD` | the IT cell officer's mobile, a one-time password | Used once by the first seed to create the `IT01` User & settings manager, who must change the password at first sign-in |
 | SMTP user / password, SMS key | named in Settings | e.g. `SMS_API_KEY`, `SMTP_USER`, `SMTP_PASSWORD` in the same `.env` |
-| `ANTHROPIC_API_KEY` | empty, or the AI service key | Only for Ask (§13). Empty = Ask is off and nothing is sent anywhere |
-| `ASK_AI_MODEL` | empty | Empty = `claude-opus-5-5` |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | empty | Only for Ask (§13), and only if the key is not entered in Settings → Ask (where it is saved encrypted). No key anywhere = Ask is off and nothing is sent |
 | `ASK_DATABASE_URL` | empty, or a login as `dcb_ask` | Optional separate database login for Ask (§13) |
 
 **Key custody.** The three keys are generated once per copy, written to the `.env` and also sealed on paper
@@ -360,7 +359,7 @@ Acceptance checks
 | Role rights as data (PRD §14); nobody prepares, checks or approves their own pay; maker ≠ checker | `src/lib/auth/access.ts`, `src/lib/approvals/` |
 | Audit trail cannot be edited (database trigger), 8 years | `prisma/migrations/*audit*`, `src/lib/audit.ts` |
 | Client address taken from the trusted proxy's entry in `X-Forwarded-For`, never from a value the browser typed | `src/lib/request-meta.ts` |
-| Ask AI: each login's reach from the §14 matrix; every statement checked with PostgreSQL's own parser (one SELECT, listed views, named functions only); run read-only as the role `dcb_ask`, which can read nothing but views that filter their rows from a 30-second pass; no identity or account number in any view; every question audited with its statements | `src/modules/ask/`, `prisma/migrations/*_ask_views` |
+| Ask AI: keys of the AI services encrypted at rest, never returned to a browser, audited without their value; each login's reach from the §14 matrix; every statement checked with PostgreSQL's own parser (one SELECT, listed views, named functions only); run read-only as the role `dcb_ask`, which can read nothing but views that filter their rows from a 30-second pass; no identity or account number in any view; every question audited with its statements | `src/modules/ask/`, `prisma/migrations/*_ask_views` |
 | Dependencies pinned; `npm audit` clean at release | `package.json`, `package-lock.json` |
 
 ---
@@ -380,7 +379,8 @@ written there vanish between runs, and the data must stay on government cloud in
    `DATABASE_URL`, `APP_ENV=training`, `APP_URL=https://<project>.vercel.app`, `DATA_ENCRYPTION_KEY`,
    `BLIND_INDEX_KEY`, `OTP_PEPPER` (the **same keys** used for the seed), `SMS_PROVIDER=console`,
    `TRUSTED_PROXY_HOPS=1`. With `training` + `console` the OTP is shown on the sign-in screen.
-   For Ask (§13) add `ANTHROPIC_API_KEY`; without it the Ask button is hidden for everyone but the Admin.
+   For Ask (§13) sign in as the Admin and enter the AI service's key under Settings → Ask (or add `GEMINI_API_KEY`
+   here); without a key the Ask button is hidden for everyone but the Admin.
 3. **PDFs**: nothing to set. On Vercel the app uses a Chromium built for serverless functions
    (`@sparticuz/chromium`); the first PDF after a quiet spell takes a few seconds longer.
 4. **Uploaded files** (documents, migration files, generated bank files) go to `/tmp` and are lost when Vercel
@@ -415,8 +415,29 @@ written there vanish between runs, and the data must stay on government cloud in
 People ask in their own words ("How much leave do I have left?", "Who retires next year?") and get an answer from
 the Board's records and from its own documents (policies, orders, circulars). **Ask is off until an API key is set.**
 
+### The AI service
+The Board chooses, under **Settings → Ask**, which service reads the question and writes the answer:
+
+| Service | Default model | Key from |
+|---|---|---|
+| **Gemini** (Google) — the default | `gemini-3.8-flash` | Google AI Studio |
+| **GPT** (OpenAI) | `gpt-5.5` | the OpenAI platform |
+| **Claude** (Anthropic) | `claude-opus-5-5` | the Anthropic console |
+
+The model name can be changed there (for example `gemini-4-argon` for Google's larger model); it is the name as the
+service lists it. Each service has its own key. **Test** asks the service one word and, when it fails, shows the
+service's own message — that is how a wrong key is told from a wrong model name.
+
+**Where a key is kept.** Entered in Settings, a key is encrypted with the Board's data key (AES-256-GCM, the same key
+that protects Aadhaar and bank numbers), stored apart from the other settings, never sent back to a browser (the
+screen shows only its last four characters), left out of the full data export, and every change is in the audit trail
+without the key. This is a deliberate exception to the rule that settings only name the environment variable of a
+secret (PRD §12 rule 7), made so that the Admin can set up Ask without the server's files. A Board that prefers the
+rule keeps the fields empty and puts the key in the `.env` (`GEMINI_API_KEY`, `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`): a key saved in Settings wins, the environment is used when none is saved.
+
 ### What leaves the server, and what never does
-To answer, the application sends to the AI service (Anthropic's API, over HTTPS): the question, a description of the
+To answer, the application sends to the chosen AI service (Google, OpenAI or Anthropic, over HTTPS): the question, a description of the
 views the person may read, the passages of the Board's documents that match, and the rows the model asks for — which
 are already limited to what that person may see. **Never sent, to anyone:** Aadhaar, PAN, bank account, PRAN, UAN,
 ESIC and GPF account numbers (they are in no view), passwords, sessions, OTPs, the audit trail's old and new values.
@@ -440,8 +461,9 @@ Every question is written to the audit trail (action `ASK`) with the statements 
 returned — never the rows. A person may ask 30 questions in 10 minutes.
 
 ### Setting it up
-1. **The key**: put `ANTHROPIC_API_KEY` in the `.env` (Vercel: Environment Variables) and restart. Optional:
-   `ASK_AI_MODEL` (default `claude-opus-5-5`).
+1. **The service and its key**: sign in as the Admin (or IT support), open **Settings → Ask**, paste the key of the
+   service you use (Gemini unless you choose another), press **Save key**, then **Test**. Or put the key in the `.env`
+   (Vercel: Environment Variables) and restart.
 2. **The database role** is made by the migration when the application's database user may create roles (the default
    user of Neon, Supabase, RDS and of the local docker set-up may). If it may not, Settings → Ask says the read-only
    role is missing; a database administrator then runs once:
@@ -457,6 +479,6 @@ returned — never the rows. A person may ask 30 questions in 10 minutes.
    `sql:` runs a statement through the same guard and role, which shows what each login can and cannot read.
 
 ### Cost and limits
-Each question is one to a few calls to the model (the instructions are cached between them). At most 200 rows come
+Each question is one to a few calls to the model; the service bills the Board's own account for them. At most 200 rows come
 back from a statement, a statement is stopped after 8 seconds, and a question after 8 steps. The model can be wrong:
 the screen says so under every answer, and "How this was worked out" shows each look-up and its query.

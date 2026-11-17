@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LoginType, Permission } from "@/generated/prisma/enums";
 import { canManageKnowledge, canUseAsk, knowledgeAudiences } from "@/lib/auth/access";
+import { parseAnswer } from "@/modules/ask/answer-format";
 import { ASK_VIEW_NAMES, ASK_VIEWS, describeViews, viewsFor } from "@/modules/ask/catalog";
 import { findPassages, partsOf, words } from "@/modules/ask/passages";
 import { buildSystemPrompt } from "@/modules/ask/prompt";
 import { askScope, hasAnyReach, type AskPrincipal } from "@/modules/ask/scope";
 import { checkSql, loadSqlParser, MAX_SQL_LENGTH } from "@/modules/ask/sql-guard";
+import { ASK_SUGGESTIONS, suggestionsFor } from "@/modules/ask/suggestions";
+import { en } from "@/lib/i18n/en";
 
 /**
  * Ask AI: how far each login's questions reach (PRD §14), which views are listed for it, and the guard every
@@ -460,5 +463,49 @@ describe("who may use Ask, read which documents and write them", () => {
     expect(canManageKnowledge(itSupport)).toBe(false);
     expect(canManageKnowledge({ ...itSupport, simple: true })).toBe(false);
     expect(canManageKnowledge(employee)).toBe(false);
+  });
+});
+
+describe("the answer on the screen", () => {
+  it("reads paragraphs, bold, lists and tables into plain data", () => {
+    const blocks = parseAnswer("Your net pay for **October 2026** was ₹41,000.\nPaid on 31 October.\n\n- Basic: ₹46,000\n- NPS: ₹5,000\n\n| Month | Net |\n| --- | ---: |\n| 2026-10 | 41,000 |\n| 2026-09 | 40,500 |\n\n1. First\n2. Second");
+    expect(blocks.map((b) => b.kind)).toEqual(["p", "ul", "table", "ol"]);
+    expect(blocks[0]).toEqual({ kind: "p", lines: [[{ kind: "text", text: "Your net pay for " }, { kind: "bold", text: "October 2026" }, { kind: "text", text: " was ₹41,000." }], [{ kind: "text", text: "Paid on 31 October." }]] });
+    const table = blocks[2] as Extract<(typeof blocks)[number], { kind: "table" }>;
+    expect(table.head.map((h) => h[0]?.text)).toEqual(["Month", "Net"]);
+    expect(table.rows.length).toBe(2);
+    expect(table.rows[1]!.map((c) => c[0]?.text)).toEqual(["2026-09", "40,500"]);
+  });
+
+  it("never yields HTML: tags the model writes stay text", () => {
+    const blocks = parseAnswer('<script>alert(1)</script> and <img src=x onerror=alert(1)> [link](javascript:alert(1))');
+    expect(blocks).toEqual([{ kind: "p", lines: [[{ kind: "text", text: '<script>alert(1)</script> and <img src=x onerror=alert(1)> [link](javascript:alert(1))' }]] }]);
+  });
+
+  it("keeps a ragged table square and shows a heading as a bold line", () => {
+    const blocks = parseAnswer("## Leave\n| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |");
+    expect(blocks[0]).toEqual({ kind: "p", lines: [[{ kind: "bold", text: "Leave" }]] });
+    const table = blocks[1] as Extract<(typeof blocks)[number], { kind: "table" }>;
+    expect(table.rows.map((r) => r.length)).toEqual([3, 3]);
+  });
+});
+
+describe("the questions offered to start with", () => {
+  const keys = (p: AskPrincipal) => suggestionsFor(askScope(p));
+
+  it("fit what the login can read", () => {
+    expect(keys(employee)).toEqual(["myLeave", "mySalary", "myAttendance", "holidays", "leaveRule"]);
+    expect(keys(officer)[0]).toBe("teamLeave");
+    expect(keys(pensioner)).toEqual(["myPension", "lifeCertificate", "holidays", "leaveRule"]);
+    expect(keys(itSupport)).toEqual(["logins", "auditToday", "holidays", "leaveRule"]);
+    expect(keys(hr)).toEqual(expect.arrayContaining(["headcount", "retiring", "onLeaveToday", "vacant"]));
+    expect(keys(hr)).not.toContain("payrollTotal");
+    expect(keys(payroll)).toEqual(expect.arrayContaining(["payrollTotal", "loans"]));
+    for (const p of [employee, officer, pensioner, hr, payroll, pension, checker, approver, itSupport]) expect(keys(p).length).toBeLessThanOrEqual(6);
+  });
+
+  it("each has its words", () => {
+    for (const k of ASK_SUGGESTIONS) expect(en.ask.suggestions[k], k).toBeTruthy();
+    expect(Object.keys(en.ask.suggestions).sort()).toEqual([...ASK_SUGGESTIONS].sort());
   });
 });

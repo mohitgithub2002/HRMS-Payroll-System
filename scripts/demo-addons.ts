@@ -1,7 +1,7 @@
 /**
  * Brings an existing demo or training copy up to date with the client add-ons, without touching what is there:
- * the DA history and any new pay heads and rates (added only where missing), and the demo leaver for the full and
- * final settlement. Run once after deploying, with the copy's database address:
+ * the DA history and any new pay heads and rates (added only where missing), the demo leaver for the full and
+ * final settlement, and a few documents to try Ask with. Run once after deploying, with the copy's database address:
  *   DATABASE_URL="<url>" npm run db:demo-addons
  * Refuses to run on a production copy (APP_ENV=production).
  *
@@ -11,7 +11,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { seedDemoLeaver } from "../prisma/seed-addons";
+import { seedAskDocuments, seedDemoLeaver } from "../prisma/seed-addons";
 import { seedPayrollRules } from "../prisma/seed-payroll";
 
 const inBuild = process.argv.includes("--training-build");
@@ -31,6 +31,8 @@ async function main() {
     console.log(`Rates and pay heads: ${after - before} new rate rows (existing ones left as they were).`);
     const leaver = await seedDemoLeaver(db, board.id);
     console.log(`Demo leaver (Vikas Malhotra, DCB10012): ${leaver}${leaver === "skipped" ? " — not on the rolls, already has a suspension or leaving recorded, or the HR login DCB10003 is missing" : ""}.`);
+    const documents = await seedAskDocuments(db, board.id);
+    console.log(`Documents for Ask: ${documents ? `${documents} added` : "left as they are"}.`);
   } finally {
     await db.$disconnect();
   }

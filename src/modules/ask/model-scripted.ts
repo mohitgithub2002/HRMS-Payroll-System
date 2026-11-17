@@ -5,7 +5,7 @@
  *
  * What it understands:
  *   "sql: <statement>"            runs the statement (handy for showing what a login can and cannot read)
- *   "… leave balance …"           the person's own leave balances
+ *   "… leave … left / balance …"  the person's own leave balances
  *   "… salary / payslip / pay …"  the person's own last three payslips
  *   "… how many employees …"      people on the rolls the person can see
  *   "… policy / rule / order …"   searches the Board's documents
@@ -79,7 +79,7 @@ export const scriptedModel: AskModel = {
     const q = lastUserText(messages).trim();
     const lower = q.toLowerCase();
     if (lower.startsWith("sql:")) return call("run_sql", { sql: q.slice(4).trim(), purpose: "Practice statement" });
-    if (/leave balance|छुट्टी|अवकाश/.test(lower)) {
+    if (/\bleave\b.*\b(balance|left|have)\b|छुट्टी बची|अवकाश शेष/.test(lower)) {
       return call("run_sql", { sql: "SELECT leave_code, balance_days, pending_days FROM leave_balances WHERE employee_id = (SELECT employee_id FROM me) ORDER BY leave_code", purpose: "Your leave balances" });
     }
     if (/salary|payslip|net pay|वेतन/.test(lower)) {
@@ -91,7 +91,7 @@ export const scriptedModel: AskModel = {
     if (/how many (employees|people|staff)/.test(lower)) {
       return call("run_sql", { sql: "SELECT count(*) AS people_on_the_rolls FROM employees WHERE status IN ('ACTIVE', 'SUSPENDED')", purpose: "People on the rolls" });
     }
-    if (/policy|rule|order|circular|नीति|नियम/.test(lower)) return call("search_documents", { query: q });
+    if (/policy|rule|order|circular|allowed|can i |how do i |timing|नीति|नियम|आदेश/.test(lower)) return call("search_documents", { query: q });
     return say("This is a practice copy without a language model, so I only know a few fixed questions: your leave balance, your salary, how many employees there are, and the Board's policies. Start a line with \"sql:\" to run a statement.");
   },
 };

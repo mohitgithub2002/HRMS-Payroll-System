@@ -27,6 +27,7 @@ import {
   Search,
   Send,
   Settings,
+  Sparkles,
   User,
   UserRound,
   Users,
@@ -196,6 +197,7 @@ export function AppShell({
   idleTimeoutMs,
   mobileBottomNav,
   employeeSearch = false,
+  ask = false,
   children,
 }: {
   menu: MenuItem[];
@@ -206,6 +208,8 @@ export function AppShell({
   mobileBottomNav: boolean;
   /** Logins that see the employee list get a search box: an exact Employee ID opens that person's full profile. */
   employeeSearch?: boolean;
+  /** Ask AI is open for this login: a button in the top bar, on every screen. */
+  ask?: boolean;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -289,6 +293,20 @@ export function AppShell({
             </form>
           )}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {ask && (
+              <Link
+                href="/ask"
+                aria-current={isActive(pathname, "/ask") ? "page" : undefined}
+                data-testid="ask-link"
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-medium transition-colors",
+                  isActive(pathname, "/ask") ? "bg-brand-700 text-white" : "bg-brand-50 text-brand-800 ring-1 ring-brand-600/20 hover:bg-brand-100",
+                )}
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                <span>{t("ask.nav")}</span>
+              </Link>
+            )}
             {inboxCount !== null && (
               <Link
                 href="/approvals"

@@ -13,7 +13,8 @@ import { canCutOver } from "./staging";
  * or to move to another system. Sign-in secrets (password hashes, sessions, OTPs) are never exported; Aadhaar, PAN and
  * bank numbers stay encrypted exactly as stored (the Board's key opens them). Only an Admin may take it, and it is logged.
  */
-const SKIP = new Set(["Session", "OtpChallenge"]);
+// AskGrant: the passes of Ask AI live for seconds and open records while they do — never part of an export.
+const SKIP = new Set(["Session", "OtpChallenge", "AskGrant"]);
 const OMIT: Record<string, string[]> = { User: ["passwordHash"] };
 /** Tables keyed by more than one column are ordered by those columns. */
 const ORDER: Record<string, object> = { Setting: [{ boardId: "asc" }, { key: "asc" }], Sequence: [{ boardId: "asc" }, { name: "asc" }] };

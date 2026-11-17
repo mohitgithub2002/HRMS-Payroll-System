@@ -80,6 +80,16 @@ A role is only a name for a set of the same permissions, so switching either way
 
 **Pension (Module 9):** sign in as Kavita (`DCB10005`, HR & Accounts → Pension). Pension bills shows the last two closed pension bills; work out this month's bill — it runs through the same five stages as salaries (Checker `DCB10006`, then `DCB10002` approves and signs with OTP). Dharam Pal (86) is held by the bill because his life certificate is a year overdue; his Jeevan Pramaan upload waits in Kavita's approvals — accept it and work the bill out again to see the held months paid with this month's pension. Pensioners lists everyone with the certificate status; a pensioner's page can change the record or record a death (a Checker approves; family pension starts the next day). New cases shows who retires in the next 12 months — start Rekha Sharma's case (retires 30 November): the calculator reads her service, pay, leave and GPF, every section answers the no-dues checklist, then the Checker and an Admin approve, the PPO prints for signature and the benefits bill pays gratuity, commuted value and leave encashment. Pension arrears works out a back-dated DR order for everyone in one bill; the commutation table is under Rates and rules → Pension tables. Pensioners sign in with their mobile and OTP (Balbir Singh, or Kamla Devi in Hindi) to see pension slips, the life certificate and their record.
 
+**Ask (client add-on):** the **Ask** button in the top bar opens a screen where anyone asks in their own words —
+"How much leave do I have left?", "Who retires in the next 12 months?", "What was the net pay last month, section by
+section?" — in English or Hindi. The answer comes from the records and from the Board's own documents (Ask → The
+Board's documents), and only ever from what that login may already see: an employee gets their own record, a section
+head the section's attendance and leave, HR people but no pay, Accounts pay but nothing beyond its desk, IT support
+logins and system events only. It needs an AI service key on the server (`ANTHROPIC_API_KEY`); to try the access rules
+without one, set `ASK_AI_PROVIDER=scripted` in `.env` — Ask then answers a few fixed questions, and a line starting
+with `sql:` runs a statement through the same checks. How access is kept, what is sent to the AI service and how to
+set it up: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) §13.
+
 ## Commands
 
 | Command | What it does |

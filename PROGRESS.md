@@ -19,12 +19,84 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 | 10 | Reports, dashboards, migration & go-live | 🟢 Done & verified (go-live steps for the Board's IT cell in [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)) |
 | C | Client add-ons (DCB review: one-screen view, suspension & full and final settlement, arrears by days, DA & TA by year, scanned service books, Excel bank file, document types) | 🟢 Done & verified (subsistence allowance and document list to confirm with DCB) |
 | W | The simple way of working (client request: simple roles, direct entries, payroll in three steps) | 🟢 Done & verified (the Board chooses Simple or Two steps in Settings; Simple is the default) |
+| A | Ask — questions in plain words about the records and the Board's documents, within each login's rights (client request) | 🟡 Built & verified with a stand-in model; **one run with a real AI service key is still to do**, and the Board decides whether records may be sent to an outside AI service |
 
 🟢 Done & verified · 🟡 In progress · ⚪ Pending
 
 ---
 
 ## Change log (newest first)
+
+### 2026-11-17 — Ask: questions in plain words, answered within each login's rights 🟡
+Asked by the client: "add the generative AI in this, that anybody can ask any question related to the data and policy
+of the department and any other info … the data can be fetched from the database by generating SQL query and running
+them, but here access control matters the most — which person has permission to which type of data."
+
+**Decided**
+- **The model is never the access control.** It writes SQL; the system decides what that SQL may read. Three walls,
+  each tested on its own, so that a mistake in one opens nothing:
+  1. *Reach* — per area (people, service book, attendance, leave, pay, loans, tax and funds, pension, rates, hiring,
+     logins, audit trail) the whole Board, the person's section, their own record or nothing, from the same §14 matrix
+     as the screens, in both ways of working (`modules/ask/scope.ts`).
+  2. *Guard* — every statement is parsed with PostgreSQL's own parser (libpg-query) and refused unless it is one
+     SELECT over the views listed for that person, with named functions, operators and types only.
+  3. *Database* — the statement runs read-only, with a time limit, through `ask.run()`, a function that executes as
+     the role `dcb_ask`: it can read the 52 views of the `ask` schema and nothing else, and inside it PostgreSQL
+     refuses any change of role. Each view filters its own rows from a pass that lives 30 seconds.
+- **The model never reads a table**, only views made for it. Aadhaar, PAN, bank account, PRAN, UAN, ESIC and GPF
+  numbers are in no view ("is it on file" only), so they cannot be sent to the AI service whatever is asked.
+- **Own-record rules follow the services**: anyone with an employee record reads their own leave, attendance,
+  payslips (once paid), funds and service book (approved entries) — also an HR clerk for themself. A section head gets
+  the section's staff list (name, post, mobile), attendance and leave; pay stays their own. A pensioner's login reads
+  the pension, not the old employee record. The User & settings manager gets logins and system events, never people
+  or pay — also in the simple way.
+- **Policies are the Board's own text**: documents pasted by the Admin (the HR manager too, in the simple way), each
+  with who may read it. Found by plain word matching (English and Hindi) — no outside service, easy to explain.
+- **Off until there is a key**; then the Board chooses who may ask: nobody, office staff or everyone (the default).
+- Claude Opus 5.5 through the Anthropic SDK (`ASK_AI_MODEL` changes it). If a safety check declines a request the API
+  tries its fallback model in the same call.
+- Conversation history is kept in the browser only; every question is in the audit trail with the statements that
+  were run and the rows counted — never the rows themselves.
+
+**Built**
+- **Ask screen** (`/ask`, a button in the top bar for every login the Board has opened it to): questions suggested by
+  what the login can read; what is being looked up while it works; the answer as paragraphs, lists and tables (built
+  as real elements, never HTML from the model); the rows behind a list, with CSV download; "How this was worked out" —
+  each look-up in plain words and its query; Stop; copy. English and Hindi; fits a phone.
+- **The Board's documents** (`/ask/documents`): add, change, switch off, remove; a text file can be loaded. Four
+  practice documents come with the demo seed (and `db:demo-addons`).
+- **Settings → Ask**: off / office staff / everyone; says when the key or the database role is missing.
+- **Database**: `AskGrant` (the pass), `KnowledgeDoc`; the `ask` schema — 52 views, two helper functions and
+  `ask.run()`; the role `dcb_ask`, made by the migration (`scripts/ask-role.sql` for a database user that may not
+  create roles). The whole-data export leaves the passes out.
+- **When the model has no access** the guard's message says so in words the model passes on ("not available to this
+  user") instead of an empty result that would read as "there are none".
+- **Limits**: 200 rows and 8 seconds per statement, 8 steps and 12 look-ups per question, 30 questions per person in
+  10 minutes.
+
+**Found and fixed while building**
+- On one shared connection PostgreSQL lets a statement undo `SET ROLE` with `set_config('role', …)`. The guard already
+  refused that call; the statement now also runs inside a SECURITY DEFINER function, where the database itself refuses
+  it — tested by sending such statements straight past the guard.
+- The full data export ordered every table by `id`; the pass table has none and must not be exported anyway.
+
+**Verified** — see the entry above this one for the final figures (this entry was written before the choice of AI service was added).
+
+**Still to do / to know**
+- **Not yet run against the real AI service**: no API key was available while building. The Claude adapter is tested
+  through the real SDK against a local stand-in for the API (what is sent, a streamed tool call, a streamed answer,
+  refused key, busy service), and everything behind it is the real thing. First step on a test copy: set
+  `ANTHROPIC_API_KEY`, ask the suggested questions as an employee, HR and Accounts, and read "How this was worked out".
+  The wording of the instructions (`modules/ask/prompt.ts`) will want tuning on real questions.
+- **The Board's decision**: with a key set, names, pay and service details needed for an answer leave the server for
+  the AI service. Whether that fits the Board's data policy (PRD §16: data in India) is theirs to decide before
+  production; docs/DEPLOYMENT.md §13 says exactly what is sent and what never is.
+- Attendance of an open month is worked out from punches when a screen shows it; Ask reads locked months' totals,
+  recorded days and raw punches, and is told so — a "was I late on the 3rd?" for the current month is answered from
+  punches, not from the day's worked-out status.
+- Documents are text only (paste, or a .txt / .md file); PDFs are not read.
+- `npm run build` stopped every other run with Next.js's own notice that the installed version (16.4.2) has a known
+  security fix available — also without this change. The upgrade is not part of this work; to be decided.
 
 ### 2026-11-16 — The simple way of working: three roles, entries that count at once, payroll in three steps ✅
 Asked by the client: "this is too complex … a very long and complicated process for the payroll and the salary

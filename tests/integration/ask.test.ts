@@ -94,11 +94,13 @@ describe.skipIf(!hasTestDb)("Ask AI — what a question may read", () => {
       await db.familyMember.create({ data: { employeeId: e.id, name: `Family of ${e.employeeCode}`, relation: "SPOUSE" } });
     }
 
-    // A pensioner (the retired employee's own login) and their pension slip.
+    // A pensioner (the retired employee's own login) and their pension slip. The pensions ended long ago, so the
+    // pension bills other test files work out for today's months do not pick them up.
+    const ended = { status: "STOPPED" as const, endDate: new Date("2001-12-31"), endReason: "Test" };
     const retired = await makeEmployee(boardId, { sectionId: s2, postId: post.id, status: "RETIRED" });
-    const p = await db.pensioner.create({ data: { boardId, employeeId: retired.id, ppoNumber: `PPO-${tag}`, type: "SUPERANNUATION", payeeName: "Devi Retired", payeeDob: new Date("1940-01-01"), basicPension: 22000, startDate: new Date("2000-02-01") } });
+    const p = await db.pensioner.create({ data: { boardId, employeeId: retired.id, ppoNumber: `PPO-${tag}`, type: "SUPERANNUATION", payeeName: "Devi Retired", payeeDob: new Date("1940-01-01"), basicPension: 22000, startDate: new Date("2000-02-01"), ...ended } });
     pensionerId = p.id;
-    const other = await db.pensioner.create({ data: { boardId, employeeId: retired.id, ppoNumber: `PPO-${tag}-B`, type: "FAMILY", relation: "SPOUSE", payeeName: "Someone Else", payeeDob: new Date("1945-01-01"), basicPension: 11000, startDate: new Date("2000-02-01") } });
+    const other = await db.pensioner.create({ data: { boardId, employeeId: retired.id, ppoNumber: `PPO-${tag}-B`, type: "FAMILY", relation: "SPOUSE", payeeName: "Someone Else", payeeDob: new Date("1945-01-01"), basicPension: 11000, startDate: new Date("2000-02-01"), ...ended } });
     const prun = await db.payrollRun.create({ data: { boardId, payGroup: "PENSION", month, kind: "SUPPLEMENTARY", seq: Math.floor(Math.random() * 1e8), status: "PAID", runById: pensionDesk.userId, runByName: "Test", runAt: new Date() } });
     for (const [pp, emp] of [[p, retired], [other, await makeEmployee(boardId, { sectionId: s2, postId: post.id, status: "RETIRED" })]] as const) {
       await db.payslip.create({ data: { boardId, runId: prun.id, employeeId: emp.id, pensionerId: pp.id, month, payGroup: "PENSION", sectionId: s2, postId: post.id, daysInMonth: 31, daysOnRoll: 31, gross: 30000, deductions: 0, net: 30000, employer: 0, lines: [line("BASIC_PENSION", "EARNING", 30000)] as unknown as Prisma.InputJsonValue } });

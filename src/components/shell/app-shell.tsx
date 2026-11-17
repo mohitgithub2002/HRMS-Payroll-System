@@ -304,7 +304,8 @@ export function AppShell({
                 )}
               >
                 <Sparkles className="size-4" aria-hidden="true" />
-                <span>{t("ask.nav")}</span>
+                {/* On the narrowest screens (320 px, or 400% zoom) only the mark fits; the name stays for screen readers. */}
+                <span className="max-[419px]:sr-only">{t("ask.nav")}</span>
               </Link>
             )}
             {inboxCount !== null && (

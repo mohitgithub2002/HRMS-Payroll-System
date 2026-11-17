@@ -127,6 +127,9 @@ Copy `.env.example` to `/srv/dcb-hrms/.env`, owned by `dcbhrms`, mode `600`.
 | `TRUSTED_PROXY_HOPS` | `1` | Reverse proxies in front of the app that add to `X-Forwarded-For`. nginx alone = 1; a cloud load balancer + nginx = 2 |
 | `BOOTSTRAP_ADMIN_MOBILE` / `BOOTSTRAP_ADMIN_PASSWORD` | the IT cell officer's mobile, a one-time password | Used once by the first seed to create the `IT01` User & settings manager, who must change the password at first sign-in |
 | SMTP user / password, SMS key | named in Settings | e.g. `SMS_API_KEY`, `SMTP_USER`, `SMTP_PASSWORD` in the same `.env` |
+| `ANTHROPIC_API_KEY` | empty, or the AI service key | Only for Ask (§13). Empty = Ask is off and nothing is sent anywhere |
+| `ASK_AI_MODEL` | empty | Empty = `claude-opus-5-5` |
+| `ASK_DATABASE_URL` | empty, or a login as `dcb_ask` | Optional separate database login for Ask (§13) |
 
 **Key custody.** The three keys are generated once per copy, written to the `.env` and also sealed on paper
 or in the Board's HSM / key vault, held by a named officer (not the vendor). Production keys are never
@@ -357,6 +360,7 @@ Acceptance checks
 | Role rights as data (PRD §14); nobody prepares, checks or approves their own pay; maker ≠ checker | `src/lib/auth/access.ts`, `src/lib/approvals/` |
 | Audit trail cannot be edited (database trigger), 8 years | `prisma/migrations/*audit*`, `src/lib/audit.ts` |
 | Client address taken from the trusted proxy's entry in `X-Forwarded-For`, never from a value the browser typed | `src/lib/request-meta.ts` |
+| Ask AI: each login's reach from the §14 matrix; every statement checked with PostgreSQL's own parser (one SELECT, listed views, named functions only); run read-only as the role `dcb_ask`, which can read nothing but views that filter their rows from a 30-second pass; no identity or account number in any view; every question audited with its statements | `src/modules/ask/`, `prisma/migrations/*_ask_views` |
 | Dependencies pinned; `npm audit` clean at release | `package.json`, `package-lock.json` |
 
 ---
@@ -376,6 +380,7 @@ written there vanish between runs, and the data must stay on government cloud in
    `DATABASE_URL`, `APP_ENV=training`, `APP_URL=https://<project>.vercel.app`, `DATA_ENCRYPTION_KEY`,
    `BLIND_INDEX_KEY`, `OTP_PEPPER` (the **same keys** used for the seed), `SMS_PROVIDER=console`,
    `TRUSTED_PROXY_HOPS=1`. With `training` + `console` the OTP is shown on the sign-in screen.
+   For Ask (§13) add `ANTHROPIC_API_KEY`; without it the Ask button is hidden for everyone but the Admin.
 3. **PDFs**: nothing to set. On Vercel the app uses a Chromium built for serverless functions
    (`@sparticuz/chromium`); the first PDF after a quiet spell takes a few seconds longer.
 4. **Uploaded files** (documents, migration files, generated bank files) go to `/tmp` and are lost when Vercel
@@ -402,3 +407,56 @@ written there vanish between runs, and the data must stay on government cloud in
    DATABASE_URL="<hosted url>" npx prisma migrate deploy        # macOS / Linux
    $env:DATABASE_URL="<hosted url>"; npx prisma migrate deploy   # Windows PowerShell
    ```
+
+---
+
+## 13. Ask — questions in plain words (client add-on)
+
+People ask in their own words ("How much leave do I have left?", "Who retires next year?") and get an answer from
+the Board's records and from its own documents (policies, orders, circulars). **Ask is off until an API key is set.**
+
+### What leaves the server, and what never does
+To answer, the application sends to the AI service (Anthropic's API, over HTTPS): the question, a description of the
+views the person may read, the passages of the Board's documents that match, and the rows the model asks for — which
+are already limited to what that person may see. **Never sent, to anyone:** Aadhaar, PAN, bank account, PRAN, UAN,
+ESIC and GPF account numbers (they are in no view), passwords, sessions, OTPs, the audit trail's old and new values.
+Before switching Ask on for production the Board should decide, with its IT cell, whether sending names, pay and
+service details to a service outside its own servers fits its data policy (PRD §16 keeps the data in India), and what
+agreement and retention terms it has with the provider. On a test or training copy with demo data there is nothing to
+decide. The switch **Settings → Ask** chooses who may use it: nobody, office staff, or everyone.
+
+### How access is kept (three walls, each tested on its own)
+1. **The person's reach** comes from the same matrix as the screens (PRD §14): per area — people, service book,
+   attendance, leave, pay, loans, tax and funds, pension, rates, hiring, logins, audit trail — the whole Board, the
+   person's section, their own record, or nothing. The model has no say in it.
+2. **The guard**: every statement the model writes is parsed with PostgreSQL's own parser and refused unless it is one
+   `SELECT` over the views listed for that person, using only named functions, operators and types.
+3. **The database**: the statement runs in a read-only transaction, with a time limit, through the function
+   `ask.run()`, which executes as the role `dcb_ask`. That role can read the views of the `ask` schema and nothing
+   else, and inside the function PostgreSQL refuses any change of role. Each view shows only the rows of a pass that
+   the application wrote for this one statement (30 seconds, random 256-bit token).
+
+Every question is written to the audit trail (action `ASK`) with the statements that were run and how many rows each
+returned — never the rows. A person may ask 30 questions in 10 minutes.
+
+### Setting it up
+1. **The key**: put `ANTHROPIC_API_KEY` in the `.env` (Vercel: Environment Variables) and restart. Optional:
+   `ASK_AI_MODEL` (default `claude-opus-5-5`).
+2. **The database role** is made by the migration when the application's database user may create roles (the default
+   user of Neon, Supabase, RDS and of the local docker set-up may). If it may not, Settings → Ask says the read-only
+   role is missing; a database administrator then runs once:
+   ```bash
+   psql -d dcb_hrms -v app=dcbhrms -f scripts/ask-role.sql
+   ```
+3. **Optional, stricter**: give Ask its own login — `ALTER ROLE dcb_ask LOGIN PASSWORD '…'` — and set
+   `ASK_DATABASE_URL` to the same database with that user. Then even the connection Ask uses cannot read a table.
+4. **The Board's documents**: the Admin (and the HR manager in the simple way of working) pastes policies, orders and
+   circulars under **Ask → The Board's documents**, and says who may read each: everyone, office staff, or the Admin.
+5. **Try it** as an employee, as HR and as Accounts before opening it to everyone. A first check that needs no key:
+   on a test copy set `ASK_AI_PROVIDER=scripted` — Ask then answers a few fixed questions, and a line starting with
+   `sql:` runs a statement through the same guard and role, which shows what each login can and cannot read.
+
+### Cost and limits
+Each question is one to a few calls to the model (the instructions are cached between them). At most 200 rows come
+back from a statement, a statement is stopped after 8 seconds, and a question after 8 steps. The model can be wrong:
+the screen says so under every answer, and "How this was worked out" shows each look-up and its query.

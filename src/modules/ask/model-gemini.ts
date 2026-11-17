@@ -48,7 +48,7 @@ export function geminiModel(opts: { apiKey: string; model: string }): AskModel {
           contents: toContents(turns),
           config: {
             systemInstruction: system,
-            tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })) }],
+            ...(tools.length ? { tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })) }] } : {}),
             maxOutputTokens: 16_000,
             abortSignal: signal,
           },

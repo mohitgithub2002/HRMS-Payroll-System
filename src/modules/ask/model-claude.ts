@@ -50,7 +50,7 @@ export function claudeModel(opts: { apiKey: string; model: string }): AskModel {
             cache_control: { type: "ephemeral" },
             system,
             // Inputs stream as they are written; the question loop validates every input before it runs anything.
-            tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters as Anthropic.Beta.BetaTool["input_schema"], eager_input_streaming: true })),
+            ...(tools.length ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters as Anthropic.Beta.BetaTool["input_schema"], eager_input_streaming: true })) } : {}),
             messages: toMessages(turns),
           },
           { signal },

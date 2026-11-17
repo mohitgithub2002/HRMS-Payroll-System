@@ -35,7 +35,7 @@ export function openaiModel(opts: { apiKey: string; model: string }): AskModel {
             model: opts.model,
             instructions: system,
             input: toInput(turns),
-            tools: tools.map((t) => ({ type: "function" as const, name: t.name, description: t.description, parameters: t.parameters, strict: false })),
+            ...(tools.length ? { tools: tools.map((t) => ({ type: "function" as const, name: t.name, description: t.description, parameters: t.parameters, strict: false })) } : {}),
             max_output_tokens: 16_000,
             // Nothing is kept at the service between steps: the conversation is sent each time, with the model's
             // reasoning carried along in encrypted form.

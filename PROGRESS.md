@@ -19,13 +19,61 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 | 10 | Reports, dashboards, migration & go-live | 🟢 Done & verified (go-live steps for the Board's IT cell in [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)) |
 | C | Client add-ons (DCB review: one-screen view, suspension & full and final settlement, arrears by days, DA & TA by year, scanned service books, Excel bank file, document types) | 🟢 Done & verified (subsistence allowance and document list to confirm with DCB) |
 | W | The simple way of working (client request: simple roles, direct entries, payroll in three steps) | 🟢 Done & verified (the Board chooses Simple or Two steps in Settings; Simple is the default) |
-| A | Ask — questions in plain words about the records and the Board's documents, within each login's rights (client request) | 🟡 Built & verified with a stand-in model; **one run with a real AI service key is still to do**, and the Board decides whether records may be sent to an outside AI service |
+| A | Ask — questions in plain words about the records and the Board's documents, within each login's rights; the AI service (Gemini by default, GPT or Claude) chosen in Settings (client request) | 🟡 Built & verified with stand-ins for the AI services; **one run with a real key is still to do**, and the Board decides whether records may be sent to an outside AI service |
 
 🟢 Done & verified · 🟡 In progress · ⚪ Pending
 
 ---
 
 ## Change log (newest first)
+
+### 2026-11-17 — Ask: the Board chooses the AI service — Gemini (default), GPT or Claude 🟡
+Asked by the client: "set the system to change the model provider between GPT, Claude and Gemini, and set API key
+values according to them; set Gemini as the default."
+
+**Decided**
+- **Settings → Ask** chooses the service and the model asked at it: **Gemini** (`gemini-3.8-flash`, the default), **GPT**
+  (`gpt-5.5`) or **Claude** (`claude-opus-5-5`). The model name can be changed (for example `gemini-4-argon`).
+- **Each service has its own key.** A key entered in Settings is encrypted with the Board's data key (AES-256-GCM),
+  kept in a settings row the settings API cannot read, never returned to a browser (only its last four characters are
+  shown), left out of the full data export, and every change is audited without the key. With no key saved, the
+  server's environment is used (`GEMINI_API_KEY` / `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Saving a
+  secret in Settings departs from PRD §12 rule 7 (settings only *name* the variable holding a secret); this was done
+  so the Admin can set Ask up without the server's files, and a Board that prefers the rule leaves the fields empty.
+- Keys and the choice of service: the Board's Admin and IT support. IT support still gets no people or pay through Ask.
+- **Test** asks the service one word and shows the person setting it up the service's own message on failure — how a
+  wrong key is told from a wrong model name. Everyone else gets plain words ("not set up", "busy", "could not reach").
+- Nothing about access changed: whichever service answers, it reads only the views and documents the person may see.
+
+**Built**
+- The question loop speaks a neutral conversation format (`modules/ask/model.ts`); one adapter per service on its
+  official SDK — `model-gemini.ts` (`@google/genai`, function declarations; the model's parts are handed back unchanged
+  so its reasoning signatures survive), `model-openai.ts` (`openai`, the Responses API with `store: false` and the
+  reasoning carried along encrypted), `model-claude.ts` (`@anthropic-ai/sdk`, as before).
+- `modules/ask/config.ts`: the choice, the keys, the environment fallback, the Test; API routes `/api/v1/ask/config`,
+  `/api/v1/ask/keys/{gemini|openai|claude}` (PUT, DELETE) and `…/test`.
+- The Settings card: who may ask; the three services with model, key status, Save key, Test, Remove key.
+
+**Fixed while verifying**
+- The Ask button in the top bar pushed a 320 px screen sideways; below 420 px it shows only its mark.
+- Attendance → Today: before office time everyone is "not in yet" and the list scrolls inside its card; it was not
+  reachable by keyboard (WCAG "scrollable-region-focusable"). This failed before 9 a.m. whether or not Ask was there.
+- The adapters sent an empty tool list on the connection test; they now send none.
+
+**Verified** — typecheck, lint, 519 unit and integration tests (new: each adapter through its real SDK against a local
+stand-in for the service's streaming protocol — the key, model, instructions, tools, the tool result and the service's
+own turn handed back; keys saved encrypted, rights, the environment fallback, a saved key winning over the environment,
+error wording, the Test, the export without the keys), production build, all 71 browser checks (new: the Admin chooses
+GPT with another model and back, saves and removes a key, the key never reaches a page or an API response; HR is
+refused) — every Ask screen also passes the WCAG 2.1 AA scan and fits a 320 px screen.
+
+**Still to do / to know**
+- **No live call has been made to any of the three services** — no key was available here, and this session's network
+  could not reach their documentation either, so model names and request options follow the SDKs' own bundled
+  documentation and types. First step on a test copy: enter the Gemini key in Settings → Ask, press Test, then ask the
+  suggested questions as an employee, HR and Accounts. If a model name has changed at the service, Test says so and
+  the name is edited in the same card.
+- GPT and Gemini have not had their instructions tuned on real questions; Claude neither.
 
 ### 2026-11-17 — Ask: questions in plain words, answered within each login's rights 🟡
 Asked by the client: "add the generative AI in this, that anybody can ask any question related to the data and policy

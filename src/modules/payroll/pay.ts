@@ -1,6 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { audit } from "@/lib/audit";
+import { afterResponse } from "@/lib/background";
 import { canAll } from "@/lib/auth/access";
 import type { Actor } from "@/lib/auth/session";
 import { decrypt } from "@/lib/crypto";
@@ -314,9 +315,7 @@ onFileReleased("bank.salary", async (tx, file, actor, afterCommit) => {
   // SL-04: credit day — payslip notices go out once the release is saved. In the simple way of working the bill
   // can still be taken back until the month is finished, so the notices go out then (payroll/simple.ts).
   if (actor.simple) return;
-  afterCommit(async () => {
-    await sendPayslipNotices(run.boardId, run.id);
-  });
+  afterCommit(() => afterResponse("payroll", () => sendPayslipNotices(run.boardId, run.id)));
 });
 
 onFileReleased("bank.repay", async (tx, file) => {

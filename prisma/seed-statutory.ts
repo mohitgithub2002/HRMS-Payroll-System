@@ -207,13 +207,17 @@ export async function seedGpfOpenings(db: PrismaClient, boardId: string, months:
   if (rows.length) await db.gpfEntry.createMany({ data: rows });
 }
 
-/** A generated file written where the app keeps them (same key shape as lib/storage). */
-async function storeFile(area: string, buffer: Buffer, ext: string) {
+/**
+ * A generated file written where the app keeps them (same key shape as lib/storage): on disk, and in the database for a
+ * copy that keeps its files there (Vercel, STORAGE_DRIVER=database).
+ */
+async function storeFile(area: string, buffer: Buffer, ext: string, db?: PrismaClient) {
   const now = new Date();
   const key = `${area}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomBytes(18).toString("base64url")}.${ext}`;
   const full = path.join(path.resolve(process.env.STORAGE_DIR ?? "./storage"), key);
   await mkdir(path.dirname(full), { recursive: true });
   await writeFile(full, buffer, { mode: 0o640 });
+  if (db) await db.storedFile.create({ data: { key, data: new Uint8Array(buffer), size: buffer.length } });
   return { key, sha256: createHash("sha256").update(buffer).digest("hex"), size: buffer.length };
 }
 
@@ -234,7 +238,7 @@ export async function seedStatutoryHistory(db: PrismaClient, boardId: string, mo
     for (const kind of STAT_KINDS) {
       const b = await buildStatFile(db, boardId, kind, month);
       if (!b.ready || !b.rows.length) continue;
-      const stored = await storeFile("files", Buffer.from(b.text, "utf8"), b.ext);
+      const stored = await storeFile("files", Buffer.from(b.text, "utf8"), b.ext, db);
       const day = kind === "stat.pension" ? `${month}-28` : `${next}-0${kind === "stat.nps" ? 4 : 9}`;
       await db.fileRecord.create({
         data: {

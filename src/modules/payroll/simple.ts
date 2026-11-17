@@ -1,6 +1,7 @@
 import "server-only";
 import { approveDirectly } from "@/lib/approvals/engine";
 import { audit } from "@/lib/audit";
+import { afterResponse } from "@/lib/background";
 import { canAll, isFullAdmin } from "@/lib/auth/access";
 import type { Actor } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -157,7 +158,8 @@ export async function finishRun(actor: Actor, runId: string) {
   const summary = await closeRun(actor, runId);
   const task = await db.approvalTask.findFirst({ where: { boardId: actor.boardId, entityType: "FileRecord", entityId: summary.id, status: "PENDING" }, select: { id: true } });
   if (task) await approveDirectly(actor, [task.id]);
-  await sendPayslipNotices(run.boardId, runId).catch((e) => console.error("[payroll] payslip notices failed", e));
+  // One PDF per payslip goes by e-mail: that is slow for a big bill, so it happens after the response.
+  await afterResponse("payroll", () => sendPayslipNotices(run.boardId, runId));
   return { id: runId };
 }
 

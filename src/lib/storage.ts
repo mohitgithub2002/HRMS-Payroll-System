@@ -2,7 +2,9 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomToken, sha256 } from "./crypto";
+import { db } from "./db";
 import { env } from "./env";
+import { AppError } from "./errors";
 
 /**
  * File storage for uploaded documents and generated files. Keys are always generated here
@@ -41,13 +43,28 @@ function root() {
 export async function saveFile(area: string, buffer: Buffer, ext: FileKind) {
   const now = new Date();
   const key = `${area}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomToken(18)}.${ext}`;
-  const full = path.join(root(), key);
-  await mkdir(path.dirname(full), { recursive: true });
-  await writeFile(full, buffer, { mode: 0o640 });
+  if (env().STORAGE_DRIVER === "database") {
+    await db.storedFile.create({ data: { key, data: new Uint8Array(buffer), size: buffer.length } });
+  } else {
+    const full = path.join(root(), key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, buffer, { mode: 0o640 });
+  }
   return { key, sha256: sha256(buffer), size: buffer.length };
 }
 
+/**
+ * A stored file's contents. Looked for where files are kept now, then in the other place (a copy that changed its
+ * STORAGE_DRIVER, or demo data written by the seed). A file in neither is reported in plain words, not as a crash.
+ */
 export async function loadFile(key: string): Promise<Buffer> {
   if (!KEY_RE.test(key)) throw new Error("Bad storage key");
-  return readFile(path.join(root(), key));
+  const fromDb = async () => {
+    const row = await db.storedFile.findUnique({ where: { key }, select: { data: true } });
+    return row ? Buffer.from(row.data) : null;
+  };
+  const fromDisk = () => readFile(path.join(root(), key)).catch((e: NodeJS.ErrnoException) => (e.code === "ENOENT" ? null : Promise.reject(e)));
+  const found = env().STORAGE_DRIVER === "database" ? ((await fromDb()) ?? (await fromDisk())) : ((await fromDisk()) ?? (await fromDb()));
+  if (!found) throw new AppError(410, "file_gone", "errors.fileGone");
+  return found;
 }

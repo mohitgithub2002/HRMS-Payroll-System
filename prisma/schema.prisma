@@ -2067,3 +2067,12 @@ model KnowledgeDoc {
 
   @@index([boardId, isActive])
 }
+
+/// A stored file's bytes, when files are kept in the database rather than on disk (STORAGE_DRIVER=database — the
+/// default on Vercel, whose disk is not kept between requests). The key is the same as on disk (lib/storage.ts).
+model StoredFile {
+  key       String   @id
+  data      Bytes
+  size      Int
+  createdAt DateTime @default(now())
+}

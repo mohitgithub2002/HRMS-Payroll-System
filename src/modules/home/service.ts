@@ -1,7 +1,7 @@
 import "server-only";
-import { after } from "next/server";
 import { cache } from "react";
 import { countInbox, listInbox } from "@/lib/approvals";
+import { afterResponse } from "@/lib/background";
 import { hasApprovalsInbox } from "@/lib/auth/menu";
 import type { Actor } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -39,12 +39,7 @@ const pensionerHomeOnce = cache((actor: Actor) => pensionerHome(actor));
 
 /** Work that must not hold the page up: after the response (and still done when there is no request, in scripts). */
 function later(job: () => Promise<unknown>) {
-  const run = () => job().then(() => undefined, (e) => console.error("[home] background job failed", e));
-  try {
-    after(run);
-  } catch {
-    void run();
-  }
+  void afterResponse("home", job);
 }
 
 /**

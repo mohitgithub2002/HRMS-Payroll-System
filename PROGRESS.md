@@ -27,6 +27,26 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 
 ## Change log (newest first)
 
+### 2026-11-17 — Payslips and bank files download on Vercel ✅
+
+- **Cause.** Files were written to the function's own disk (`/tmp` on Vercel). Each Vercel function instance has its
+  own disk, so a bank file made by one could not be read by the instance that served the download, and every file
+  vanished when an instance was recycled. Payslip PDFs, built on request, could also run past the default function
+  time on a cold start (Chromium starting).
+- **Fix.** `lib/storage.ts` keeps files in the database table `StoredFile` when `STORAGE_DRIVER=database` (the
+  default when `VERCEL` is set; the disk folder stays the default elsewhere). Reading looks in the other store too,
+  so files made before a switch still open; a file that is in neither answers 410 with "make it again from its
+  screen" instead of a broken download. The seed's statutory files follow the same driver. The migration export
+  skips `StoredFile` (and `AskGrant`, and the encrypted `askKeys` row).
+- `maxDuration = 60` on the routes that build PDFs or files on request (payslips, run print, PPO, settlement, GPF
+  statement, letters, Form 16, leave ledger, printed migration report, file download, report export) and on the
+  routes that finish a month or send payslip notices.
+- **Finishing a month no longer waits for the e-mails.** Payslip notices (one PDF per slip) go out after the
+  response (`lib/background.ts` `afterResponse`; Home's daily jobs use it too); outside a request — the seed,
+  scripts, tests — the work is done there and then, so `payslipsSentAt` is set as before.
+- Tests: `tests/integration/storage.test.ts` (disk, database, either way round, 410); the payroll browser check waits
+  for the page to be ready before choosing the return file; the browser checks also pass with `STORAGE_DRIVER=database`.
+
 ### 2026-11-17 — Pages answer in a fraction of the time: fewer trips to the database, one after another ✅
 Asked by the client: "the app is very very slow — a single page change takes too much time; find the root cause."
 

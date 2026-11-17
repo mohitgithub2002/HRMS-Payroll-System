@@ -82,6 +82,7 @@ test("Module 6 — run, fix exceptions, check, approve with OTP, pay and close (
   const run = (await (await page.request.get(`/api/v1/payroll/runs/${runId}`)).json()).data as { people: { code: string; net: number; status: string }[] };
   const shalini = run.people.find((p) => p.code === "DCB10020")!;
   const paid = run.people.filter((p) => p.status === "INCLUDED").length;
+  await page.waitForLoadState("networkidle");
   await page.locator("#return-file").setInputFiles({ name: "return.csv", mimeType: "text/csv", buffer: Buffer.from(`Employee ID,Amount,Status,Reason\r\nDCB10020,${shalini.net.toFixed(2)},FAILED,Account dormant\r\n`) });
   await expect(page.getByText(`1 failed, ${paid - 1} credited.`)).toBeVisible();
   await page.getByRole("button", { name: "Make re-pay file" }).click();

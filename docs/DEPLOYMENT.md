@@ -123,6 +123,7 @@ Copy `.env.example` to `/srv/dcb-hrms/.env`, owned by `dcbhrms`, mode `600`.
 | `OTP_PEPPER` | `openssl rand -base64 32` | Mixed into stored OTP hashes |
 | `SMS_PROVIDER` | `http` | Gateway URL, sender ID, DLT entity and template IDs are set in Settings → SMS; the API key stays in an environment variable whose **name** the setting holds |
 | `STORAGE_DIR` | `/srv/dcb-hrms-files` | |
+| `STORAGE_DRIVER` | `disk` (the default off Vercel) | `database` keeps files in the database table `StoredFile` instead of the folder — the default on Vercel, where a folder is not shared between function instances |
 | `CHROMIUM_PATH` | empty, or the path of a Chromium the IT cell installed | Empty = the Chromium installed by `npx playwright-core install chromium` (§6) |
 | `TRUSTED_PROXY_HOPS` | `1` | Reverse proxies in front of the app that add to `X-Forwarded-For`. nginx alone = 1; a cloud load balancer + nginx = 2 |
 | `BOOTSTRAP_ADMIN_MOBILE` / `BOOTSTRAP_ADMIN_PASSWORD` | the IT cell officer's mobile, a one-time password | Used once by the first seed to create the `IT01` User & settings manager, who must change the password at first sign-in |
@@ -370,8 +371,8 @@ Acceptance checks
 
 ## 12. A demo copy on Vercel
 
-Vercel is fine for **showing the product** (a training or demo copy). It is **not** for production: files
-written there vanish between runs, and the data must stay on government cloud in India (§16).
+Vercel is fine for **showing the product** (a training or demo copy). It is **not** for production: the data
+must stay on government cloud in India (§16).
 
 1. **Database**: a hosted PostgreSQL 16 (Neon, Supabase…). Use `?sslmode=verify-full` in the URL (this also
    silences pg's SSL-mode warning). **Put the database and the Vercel functions in the same region** (Vercel →
@@ -390,8 +391,12 @@ written there vanish between runs, and the data must stay on government cloud in
    here); without a key the Ask button is hidden for everyone but the Admin.
 3. **PDFs**: nothing to set. On Vercel the app uses a Chromium built for serverless functions
    (`@sparticuz/chromium`); the first PDF after a quiet spell takes a few seconds longer.
-4. **Uploaded files** (documents, migration files, generated bank files) go to `/tmp` and are lost when Vercel
-   recycles the function. Downloads made right away work; nothing is kept.
+4. **Files** (uploaded documents, migration files, bank and return files, saved PDFs) are kept **in the database**
+   on Vercel (`STORAGE_DRIVER=database` is the default there). A Vercel function's disk is its own: a bank file
+   written by one instance could not be downloaded from the next, which is why downloads failed before. Files made
+   on a demo copy before this change were in `/tmp` and are gone — the download says so; make the bank file (or
+   the document) again from its screen. Slow downloads that build a PDF on request (payslips, PPO, Form 16…) may
+   run up to 60 seconds (`maxDuration`); the plan's limit applies if it is lower.
 5. Deploy by pushing the branch Vercel watches. Vercel runs the `vercel-build` script, which **applies any new
    database migrations first** (`prisma migrate deploy`) and then builds — so a new version never meets an old
    database. `DATABASE_URL` must therefore be available to builds (tick the environments when you add it). If

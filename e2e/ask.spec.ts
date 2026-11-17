@@ -12,7 +12,7 @@ test.describe.configure({ mode: "serial" });
 async function ask(page: Page, question: string) {
   const before = await page.getByTestId("ask-turn").count();
   await page.getByRole("textbox", { name: "Type your question…" }).fill(question);
-  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const turn = page.getByTestId("ask-turn").nth(before);
   await expect(turn.getByTestId("ask-working")).toHaveCount(0, { timeout: 30_000 });
   return turn;
@@ -22,7 +22,7 @@ test("an employee asks about their own leave and pay, and is told what is outsid
   await signIn(page, { as: "Employee / Pensioner", id: "DCB10014" });
   await page.getByTestId("ask-link").click();
   await page.waitForURL("**/ask");
-  await expect(page.getByRole("heading", { name: "Ask", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask AI", exact: true })).toBeVisible();
   await expect(page.getByText("Practice copy: no AI service is connected")).toBeVisible();
 
   // A suggested question: the person's own balances, as a table.
@@ -126,6 +126,7 @@ test("the Admin writes a document, Ask quotes it, and the Admin decides who may 
   await expect(page.getByText("Saved.").first()).toBeVisible();
   await signIn(page, { as: "Employee / Pensioner", id: "DCB10014" });
   await expect(page.getByTestId("ask-link")).toHaveCount(0);
+  await expect(page.getByTestId("ask-link-mobile")).toHaveCount(0);
   await page.goto("/ask");
   await expect(page.getByText("Ask is not open for your login")).toBeVisible();
   const res = await page.request.post("/api/v1/ask", { data: { question: "How much leave do I have left?" } });
@@ -211,6 +212,8 @@ test("an employee cannot open the documents screen or its API", async ({ page })
 
 test("the Ask screens meet WCAG 2.1 AA, in Hindi too", async ({ page }) => {
   const scan = async (path: string) => {
+    // Entrance animations fade the text in; contrast is judged once they have settled (the endless ones are decorative).
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.effect?.getComputedTiming().iterations === Infinity || a.playState !== "running"));
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
     expect(results.violations.map((v) => `${path}: ${v.id} (${v.nodes.length})`), path).toEqual([]);
   };
@@ -230,5 +233,5 @@ test("the Ask screens meet WCAG 2.1 AA, in Hindi too", async ({ page }) => {
 
   await page.context().addCookies([{ name: "dcb_lang", value: "hi", url: page.url() }]);
   await page.goto("/ask");
-  if (await page.getByRole("heading", { name: "पूछें", exact: true }).isVisible().catch(() => false)) await scan("/ask (Hindi)");
+  if (await page.getByRole("heading", { name: "एआई से पूछें", exact: true }).isVisible().catch(() => false)) await scan("/ask (Hindi)");
 });

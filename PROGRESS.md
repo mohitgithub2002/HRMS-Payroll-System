@@ -27,6 +27,38 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 
 ## Change log (newest first)
 
+### 2026-11-17 — Ask redesigned; the month lock no longer times out ✅
+**Asked by the client:** "the Ask AI has a very bad UI … add the Ask AI button in the sidebar, keep the message box at
+the bottom of the page, make it feel premium — inspiration from ChatGPT and Claude"; and an error while reviewing and
+locking a month's attendance ("A query cannot be executed on an expired transaction … 5000 ms").
+
+**Ask AI — built**
+- **Ask AI in the sidebar**: one button above the menu (not one of its eight places), in the phone menu too; on a phone
+  the top bar also has the mark.
+- **The screen fills the page** under the top bar: the conversation scrolls, the question box stays at the bottom (above
+  the phone's bottom bar), the page itself never scrolls.
+- **Empty screen**: a greeting by name and time of day (India time), what Ask does, the questions it suggests for this
+  login as cards with an icon each, and what is sent where.
+- **Conversation**: the question in a soft bubble on the right; the answer full width next to the Ask mark, written as it
+  arrives with a caret; while it works, what it is doing now and each look-up done so far; when it is done, "How this
+  was worked out · N look-ups" above the answer, the rows behind a list, Copy and Ask again; an error with Ask again.
+- **The question box**: grows with what is typed, Enter sends and Shift + Enter starts a new line, a round send button
+  (Stop while it works), "Only what your login may see", and a button to jump to the latest message after scrolling up.
+- The bar of the screen names the service that answers (Gemini, GPT or Claude, or "Practice copy"), the Board's
+  documents and New chat. "Ask" is now "Ask AI" (Hindi "एआई से पूछें").
+
+**Attendance — fixed**
+- The month lock wrote every person's every day one statement at a time inside one transaction — about 900 statements
+  for a 30-person section — and ran past the 5-second limit on a hosted database (the Vercel copy). It now works the
+  rows out first and writes them in a few statements (new days in batches, decided days one by one, leave debits in
+  one), with a 30-second limit as a margin.
+- The same pattern in the approval of a month's muster (up to 2,000 entries) is batched the same way, and approving
+  anything now has the same 30-second limit (the change is applied in the approval's own transaction).
+
+**Verified** — typecheck, lint, the attendance, leave, approvals, payroll and simple-way tests (47), build, browser checks
+for attendance (punch file, correction, officer's decision and month lock, muster, holiday calendar), Ask (8, WCAG 2.1 AA
+in English and Hindi) and every phone layout (12). Looked at on a desktop and on a phone in Hindi.
+
 ### 2026-11-17 — Ask: the Board chooses the AI service — Gemini (default), GPT or Claude 🟡
 Asked by the client: "set the system to change the model provider between GPT, Claude and Gemini, and set API key
 values according to them; set Gemini as the default."

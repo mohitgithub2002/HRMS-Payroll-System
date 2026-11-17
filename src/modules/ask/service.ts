@@ -112,7 +112,7 @@ const readInput = z.object({ id: z.string().min(1).max(60) });
 /** What the screen needs to know before the first question. */
 export async function askStatus(actor: Actor) {
   const config = await askConfig(actor.boardId);
-  return { allowed: canUseAsk(actor, config.audience), configured: config.ready, practice: config.practice, audience: config.audience };
+  return { allowed: canUseAsk(actor, config.audience), configured: config.ready, practice: config.practice, audience: config.audience, provider: config.provider };
 }
 
 /** Rows as the model reads them: whole rows only, as many as fit. */

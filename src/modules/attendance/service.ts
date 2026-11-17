@@ -537,16 +537,36 @@ export async function submitMuster(actor: Actor, raw: unknown) {
 /** Applied when the Checker approves a muster batch. */
 export async function applyMuster(tx: Tx, actor: Actor, payload: MusterPayload, makerId: string) {
   await assertUnlocked(tx, actor.boardId, payload.sectionId, payload.month);
-  for (const entry of payload.entries) {
-    const date = fromISODate(entry.date);
-    if (entry.status === null) {
-      await tx.attendanceDay.deleteMany({ where: { employeeId: entry.employeeId, date, source: "MUSTER" } });
-      continue;
+  // A month's muster can be a couple of thousand entries: a few statements, not one per day.
+  const key = (employeeId: string, date: string) => `${employeeId}|${date}`;
+  const cleared = payload.entries.filter((e) => e.status === null);
+  const marked = new Map<string, (typeof payload.entries)[number] & { status: DayStatus }>();
+  for (const e of payload.entries) if (e.status !== null) marked.set(key(e.employeeId, e.date), e as (typeof payload.entries)[number] & { status: DayStatus });
+  for (let i = 0; i < cleared.length; i += 500) {
+    await tx.attendanceDay.deleteMany({ where: { source: "MUSTER", OR: cleared.slice(i, i + 500).map((e) => ({ employeeId: e.employeeId, date: fromISODate(e.date) })) } });
+  }
+  const entries = [...marked.values()];
+  const existing = new Set<string>();
+  for (let i = 0; i < entries.length; i += 500) {
+    const rows = await tx.attendanceDay.findMany({ where: { OR: entries.slice(i, i + 500).map((e) => ({ employeeId: e.employeeId, date: fromISODate(e.date) })) }, select: { employeeId: true, date: true } });
+    for (const r of rows) existing.add(key(r.employeeId, toISODate(r.date)));
+  }
+  // Days that already have a row take the muster's status (one statement per status); the rest are new rows.
+  const byStatus = new Map<DayStatus, typeof entries>();
+  for (const e of entries) if (existing.has(key(e.employeeId, e.date))) byStatus.set(e.status, [...(byStatus.get(e.status) ?? []), e]);
+  for (const [status, list] of byStatus) {
+    for (let i = 0; i < list.length; i += 500) {
+      await tx.attendanceDay.updateMany({
+        where: { OR: list.slice(i, i + 500).map((e) => ({ employeeId: e.employeeId, date: fromISODate(e.date) })) },
+        data: { status, source: "MUSTER", half: false, leaveCode: null, checked: true, firstIn: null, lastOut: null, workedMinutes: null, updatedById: makerId },
+      });
     }
-    await tx.attendanceDay.upsert({
-      where: { employeeId_date: { employeeId: entry.employeeId, date } },
-      create: { boardId: actor.boardId, employeeId: entry.employeeId, date, status: entry.status, source: "MUSTER", updatedById: makerId },
-      update: { status: entry.status, source: "MUSTER", half: false, leaveCode: null, checked: true, firstIn: null, lastOut: null, workedMinutes: null, updatedById: makerId },
+  }
+  const fresh = entries.filter((e) => !existing.has(key(e.employeeId, e.date)));
+  for (let i = 0; i < fresh.length; i += 1000) {
+    await tx.attendanceDay.createMany({
+      data: fresh.slice(i, i + 1000).map((e) => ({ boardId: actor.boardId, employeeId: e.employeeId, date: fromISODate(e.date), status: e.status, source: "MUSTER" as const, updatedById: makerId })),
+      skipDuplicates: true,
     });
   }
   await emit(tx, actor.boardId, "attendance.muster_checked", { type: "AttendanceMuster", id: `${payload.sectionId}:${payload.month}` }, { entries: payload.entries.length });
@@ -619,51 +639,57 @@ export async function lockMonth(actor: Actor, raw: unknown) {
     if (available !== null && days > available) throw badRequest("attendance.errors.leaveShort", undefined, { code, days, available });
   }
 
-  return db.$transaction(async (tx) => {
-    await assertUnlocked(tx, actor.boardId, input.sectionId, input.month);
-    let diesNon = 0;
-    for (const row of preview.rows) {
-      for (const d of row.days) {
-        if (!d.onRoll || !d.status) continue;
-        const key = `${row.employee.id}|${d.date}`;
-        const r = decided.get(key);
-        let status: DayStatus = d.status;
-        let half = d.half;
-        let source: AttendanceDay["source"] = d.from === "punches" ? "DEVICE" : "LOCK";
-        let note: string | null | undefined;
-        let leaveCode: string | null = null;
-        if (r) {
-          // A half day confirmed as dies-non (or leave) is half a day of it; the other half was worked.
-          half = (r.outcome === "DIES_NON" || r.outcome === "LEAVE") && exceptionStatus.get(key) === "HALF_DAY";
-          status = r.outcome;
-          source = "LOCK";
-          note = r.note ?? null;
-          if (r.outcome === "DIES_NON") diesNon += half ? 0.5 : 1;
-          if (r.outcome === "LEAVE") {
-            const type = leaveTypes.get(r.leaveCode!)!;
-            leaveCode = type.code;
-            await tx.leaveLedger.create({
-              data: {
-                boardId: actor.boardId,
-                employeeId: row.employee.id,
-                leaveCode: type.debitFrom ?? type.code,
-                date: fromISODate(d.date),
-                kind: "DEBIT",
-                days: -(half ? 0.5 : 1) * type.debitFactor,
-                note: `Unexplained day treated as ${type.code} at the month lock`,
-                createdById: actor.userId,
-              },
-            });
-          }
-        } else if (d.from === "saved") continue; // already a saved row
-        const date = fromISODate(d.date);
-        await tx.attendanceDay.upsert({
-          where: { employeeId_date: { employeeId: row.employee.id, date } },
-          create: { boardId: actor.boardId, employeeId: row.employee.id, date, status, half, source, leaveCode, note: note ?? null, firstIn: d.firstIn, lastOut: d.lastOut, workedMinutes: d.workedMinutes, updatedById: actor.userId },
-          update: { status, half, source, leaveCode, note: note ?? null, updatedById: actor.userId },
-        });
-      }
+  // Work out every row first, then write them in a few statements: a section's month is hundreds of days, and one
+  // statement per day ran past the transaction's time limit on a hosted database.
+  let diesNon = 0;
+  const created: Prisma.AttendanceDayCreateManyInput[] = [];
+  const updated: { employeeId: string; date: Date; data: Prisma.AttendanceDayUpdateInput }[] = [];
+  const debits: Prisma.LeaveLedgerCreateManyInput[] = [];
+  for (const row of preview.rows) {
+    for (const d of row.days) {
+      if (!d.onRoll || !d.status) continue;
+      const key = `${row.employee.id}|${d.date}`;
+      const r = decided.get(key);
+      let status: DayStatus = d.status;
+      let half = d.half;
+      let source: AttendanceDay["source"] = d.from === "punches" ? "DEVICE" : "LOCK";
+      let note: string | null = null;
+      let leaveCode: string | null = null;
+      if (r) {
+        // A half day confirmed as dies-non (or leave) is half a day of it; the other half was worked.
+        half = (r.outcome === "DIES_NON" || r.outcome === "LEAVE") && exceptionStatus.get(key) === "HALF_DAY";
+        status = r.outcome;
+        source = "LOCK";
+        note = r.note ?? null;
+        if (r.outcome === "DIES_NON") diesNon += half ? 0.5 : 1;
+        if (r.outcome === "LEAVE") {
+          const type = leaveTypes.get(r.leaveCode!)!;
+          leaveCode = type.code;
+          debits.push({
+            boardId: actor.boardId,
+            employeeId: row.employee.id,
+            leaveCode: type.debitFrom ?? type.code,
+            date: fromISODate(d.date),
+            kind: "DEBIT",
+            days: -(half ? 0.5 : 1) * type.debitFactor,
+            note: `Unexplained day treated as ${type.code} at the month lock`,
+            createdById: actor.userId,
+          });
+        }
+      } else if (d.from === "saved") continue; // already a saved row
+      const date = fromISODate(d.date);
+      // Only a "saved" day has a row already; every other day is new.
+      if (d.from === "saved") updated.push({ employeeId: row.employee.id, date, data: { status, half, source, leaveCode, note, updatedById: actor.userId } });
+      else created.push({ boardId: actor.boardId, employeeId: row.employee.id, date, status, half, source, leaveCode, note, firstIn: d.firstIn, lastOut: d.lastOut, workedMinutes: d.workedMinutes, updatedById: actor.userId });
     }
+  }
+
+  return db.$transaction(
+    async (tx) => {
+    await assertUnlocked(tx, actor.boardId, input.sectionId, input.month);
+    for (let i = 0; i < created.length; i += 1000) await tx.attendanceDay.createMany({ data: created.slice(i, i + 1000), skipDuplicates: true });
+    for (const u of updated) await tx.attendanceDay.update({ where: { employeeId_date: { employeeId: u.employeeId, date: u.date } }, data: u.data });
+    if (debits.length) await tx.leaveLedger.createMany({ data: debits });
     // Freeze the totals payroll reads.
     const employees = preview.rows.map((r) => r.employee.id);
     const section = preview.section;
@@ -714,7 +740,10 @@ export async function lockMonth(actor: Actor, raw: unknown) {
     });
     await emit(tx, actor.boardId, "attendance.month_locked", { type: "AttendanceLock", id: lock.id }, { sectionId: section.id, month: input.month, employees: employees.length });
     return lock;
-  });
+    },
+    // A large section on a distant database: room to finish, still well short of a request's own limit.
+    { maxWait: 10_000, timeout: 30_000 },
+  );
 }
 
 /** HR asks to reopen a locked month; a Checker decides (payroll will refuse once it has used the month). */

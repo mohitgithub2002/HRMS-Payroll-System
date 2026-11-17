@@ -1,105 +1,116 @@
-import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { AppError } from "@/lib/errors";
-import { scriptedModel } from "./model-scripted";
-
 /**
- * Ask AI: the language model. One small interface so the question loop (service.ts) does not care who answers:
- * Claude through the Anthropic API in real use, a scripted stand-in for tests and practice copies without a key.
+ * Ask AI: the language model, as the question loop (service.ts) sees it — one small interface, whoever answers.
+ * The Board chooses the AI service in Settings: Gemini (the default), GPT or Claude; each has an adapter that turns
+ * this neutral conversation into the service's own form and back (model-gemini.ts, model-openai.ts, model-claude.ts).
+ * A scripted stand-in serves tests and practice copies (model-scripted.ts).
  *
- * The model receives the question, the description of the views the person may read and the results of the
- * statements it asks for — nothing else. It holds no database connection and no credentials.
+ * Whichever it is, the model receives the question, the description of the views the person may read and the results
+ * of the statements it asks for — nothing else. It holds no database connection and never decides access.
+ * Pure types and helpers: no server imports here.
  */
-export type AskMessage = Anthropic.Beta.BetaMessageParam;
-export type AskTool = Anthropic.Beta.BetaTool;
-export type AskReply = Pick<Anthropic.Beta.BetaMessage, "content" | "stop_reason"> & { model?: string; usage?: { input_tokens: number; output_tokens: number } };
+export const ASK_PROVIDERS = ["gemini", "openai", "claude"] as const;
+export type AskProvider = (typeof ASK_PROVIDERS)[number];
+
+/** The model asked when Settings names none. Gemini is the Board's default service. */
+export const DEFAULT_ASK_PROVIDER: AskProvider = "gemini";
+export const DEFAULT_ASK_MODELS: Record<AskProvider, string> = {
+  gemini: "gemini-3.8-flash",
+  openai: "gpt-5.5",
+  claude: "claude-opus-5-5",
+};
+
+/** The environment variables a key may come from when none is saved in Settings (first one set wins). */
+export const ASK_KEY_ENV: Record<AskProvider, readonly string[]> = {
+  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+  openai: ["OPENAI_API_KEY"],
+  claude: ["ANTHROPIC_API_KEY"],
+};
+
+export interface AskToolDef {
+  name: string;
+  description: string;
+  /** JSON Schema of the input (an object). */
+  parameters: Record<string, unknown>;
+}
+
+export interface AskToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+export interface AskToolResult {
+  id: string;
+  name: string;
+  /** JSON text. */
+  content: string;
+  isError: boolean;
+}
+
+/** What a service returned, kept exactly, so the same service gets its own turn back unchanged (reasoning included). */
+export interface AskRaw {
+  provider: AskProvider | "scripted";
+  data: unknown;
+}
+
+export type AskTurn =
+  | { role: "user"; text: string }
+  | { role: "assistant"; text: string; calls: AskToolCall[]; raw?: AskRaw }
+  | { role: "tool"; results: AskToolResult[]; /** A word from the application after the results. */ note?: string };
+
+export interface AskReply {
+  text: string;
+  calls: AskToolCall[];
+  /** end: the answer · tools: look-ups wanted · length: cut off · refusal: the service declined. */
+  stop: "end" | "tools" | "length" | "refusal";
+  raw?: AskRaw;
+  /** The model that answered, as the service names it. */
+  model?: string;
+}
 
 export interface AskModelRequest {
   system: string;
-  tools: AskTool[];
-  messages: AskMessage[];
-  /** Called with each piece of text as it is written. */
+  tools: AskToolDef[];
+  turns: AskTurn[];
+  /** Called with each piece of the answer as it is written. */
   onText?: (delta: string) => void;
   signal?: AbortSignal;
 }
 
 export interface AskModel {
-  /** Shown in the audit trail. */
+  /** Shown in the audit trail: "gemini:gemini-3.8-flash". */
   id: string;
   reply(req: AskModelRequest): Promise<AskReply>;
 }
 
-/** Claude Opus 5.5 unless the deployment names another model. */
-export const DEFAULT_ASK_MODEL = "claude-opus-5-5";
-
-const isProductionCopy = () => process.env.APP_ENV === "production";
-const scripted = () => process.env.ASK_AI_PROVIDER === "scripted" && !isProductionCopy();
-
-/** Is there a model to ask? (An API key on the server, or the practice stand-in outside production.) */
-export function askConfigured(): boolean {
-  return scripted() || Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+/**
+ * What went wrong at the AI service, in a form the application can word for the person asking. `detail` is the
+ * service's own message — shown only to the Admin who tests the connection, and written to the server log.
+ */
+export class AskModelError extends Error {
+  constructor(
+    public readonly kind: "auth" | "busy" | "unreachable" | "request",
+    public readonly detail: string,
+  ) {
+    super(`${kind}: ${detail}`);
+  }
 }
 
-/** True when answers come from the scripted stand-in — the screen says so. */
-export const askIsPractice = () => scripted();
-
-let client: Anthropic | undefined;
-
-function claude(): AskModel {
-  const model = process.env.ASK_AI_MODEL?.trim() || DEFAULT_ASK_MODEL;
-  return {
-    id: model,
-    async reply({ system, tools, messages, onText, signal }) {
-      // Credentials come from the environment (ANTHROPIC_API_KEY); nothing is read from the Board's settings.
-      client ??= new Anthropic({ maxRetries: 2, timeout: 120_000 });
-      try {
-        const stream = client.beta.messages.stream(
-          {
-            model,
-            max_tokens: 16_000,
-            // If a safety check declines a request, the API tries the fallback model inside the same call.
-            betas: ["server-side-fallback-2026-07-01"],
-            fallbacks: "default",
-            thinking: { type: "adaptive" },
-            output_config: { effort: "medium" },
-            // The instructions and the view list are the same for every step of one question (and for the next
-            // question of the same person), so they are read from the cache after the first step.
-            cache_control: { type: "ephemeral" },
-            system,
-            tools,
-            messages,
-          },
-          { signal },
-        );
-        if (onText) stream.on("text", onText);
-        const message = await stream.finalMessage();
-        return { content: message.content, stop_reason: message.stop_reason, model: message.model, usage: { input_tokens: message.usage.input_tokens, output_tokens: message.usage.output_tokens } };
-      } catch (e) {
-        throw toAppError(e);
-      }
-    },
-  };
+/** HTTP status of a failed call → what kind of trouble it is. */
+export function kindOfStatus(status: number | undefined): AskModelError["kind"] {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429 || (status !== undefined && status >= 500)) return "busy";
+  return "request";
 }
 
-/** What went wrong, in words for the person asking; the details stay in the server log. */
-function toAppError(e: unknown): unknown {
-  if (e instanceof Anthropic.APIUserAbortError) return e;
-  if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
-    console.error("[ask] the model refused the API key", e.message);
-    return new AppError(503, "ask_not_set_up", "ask.errors.notSetUp");
-  }
-  if (e instanceof Anthropic.RateLimitError) return new AppError(503, "ask_busy", "ask.errors.busy");
-  if (e instanceof Anthropic.APIConnectionError) {
-    console.error("[ask] could not reach the model", e.message);
-    return new AppError(503, "ask_unreachable", "ask.errors.unreachable");
-  }
-  if (e instanceof Anthropic.APIError) {
-    console.error("[ask] model error", e.status, e.message);
-    return new AppError(e.status && e.status >= 500 ? 503 : 502, "ask_model_error", e.status && e.status >= 500 ? "ask.errors.busy" : "ask.errors.failed");
-  }
-  return e;
-}
+export const isAborted = (signal: AbortSignal | undefined, e: unknown) => Boolean(signal?.aborted) || (e instanceof Error && e.name === "AbortError");
 
-export function askModel(): AskModel {
-  return scripted() ? scriptedModel : claude();
+/** Tool input as an object, whatever a service sent (JSON text, an object, nothing). */
+export function parseToolInput(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw ?? {};
+  try {
+    return JSON.parse(raw || "{}") as unknown;
+  } catch {
+    return { INVALID_JSON: raw.slice(0, 500) };
+  }
 }

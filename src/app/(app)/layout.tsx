@@ -7,8 +7,7 @@ import { hasApprovalsInbox, menuFor } from "@/lib/auth/menu";
 import { roleOf } from "@/lib/auth/roles";
 import { IDLE_TIMEOUT_MS, requireActor } from "@/lib/auth/session";
 import { MARK } from "@/lib/brand";
-import { askConfigured } from "@/modules/ask/model";
-import { getSetting } from "@/modules/settings/service";
+import { askConfig } from "@/modules/ask/config";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireActor();
@@ -17,8 +16,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (actor.mustChangePassword && !path.startsWith("/profile")) redirect("/profile?setup=1");
 
   const inbox = hasApprovalsInbox(actor) ? await countInbox(actor) : null;
-  // Ask AI: shown when the Board has opened it for this login. Admins also see it before the key is set, with what to do.
-  const ask = canUseAsk(actor, (await getSetting(actor.boardId, "ask")).audience) && (askConfigured() || actor.loginType === "ADMIN");
+  // Ask AI: shown when the Board has opened it for this login. Admins also see it before a key is set, with what to do.
+  const askSetup = await askConfig(actor.boardId);
+  const ask = canUseAsk(actor, askSetup.audience) && (askSetup.ready || actor.loginType === "ADMIN");
   return (
     <AppShell
       menu={menuFor(actor)}

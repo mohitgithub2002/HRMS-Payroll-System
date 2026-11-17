@@ -9,6 +9,7 @@ import type { AskModel, AskReply } from "@/modules/ask/model";
 import { askRoleReady, closeAskPool, runAsAskRole, runAskSql } from "@/modules/ask/runner";
 import { askScope } from "@/modules/ask/scope";
 import { ask, askStatus, type AskEvent } from "@/modules/ask/service";
+import { SETTING_DEFAULTS } from "@/modules/settings/schema";
 import { updateSetting } from "@/modules/settings/service";
 import { actorFor, hasTestDb, makeBoard, makeEmployee, makePost, makeSection, makeUser } from "../support/factory";
 
@@ -393,20 +394,19 @@ describe.skipIf(!hasTestDb)("Ask AI — what a question may read", () => {
   });
 
   describe("a whole question", () => {
-    const toolUse = (name: string, input: Record<string, unknown>): AskReply => ({ content: [{ type: "tool_use", id: `toolu_${Math.random().toString(36).slice(2)}`, name, input }], stop_reason: "tool_use" });
-    const say = (text: string): AskReply => ({ content: [{ type: "text", text, citations: null }], stop_reason: "end_turn" });
+    const toolUse = (name: string, input: Record<string, unknown>): AskReply => ({ text: "", calls: [{ id: `call_${Math.random().toString(36).slice(2)}`, name, input }], stop: "tools" });
+    const say = (text: string): AskReply => ({ text, calls: [], stop: "end" });
     /** A model that follows a script and remembers what it was shown. */
     function scripted(script: AskReply[]) {
       const seen: { system: string; results: string[] }[] = [];
       let i = 0;
       const model: AskModel = {
-        id: "test-model",
+        id: "test:test-model",
         async reply(req) {
-          const last = req.messages[req.messages.length - 1]!;
-          const results = typeof last.content === "string" || !last.content ? [] : last.content.flatMap((b) => (b.type === "tool_result" && typeof b.content === "string" ? [b.content] : []));
-          seen.push({ system: req.system, results });
+          const last = req.turns[req.turns.length - 1]!;
+          seen.push({ system: req.system, results: last.role === "tool" ? last.results.map((r) => r.content) : [] });
           const next = script[Math.min(i++, script.length - 1)]!;
-          for (const b of next.content) if (b.type === "text") req.onText?.(b.text);
+          if (next.text) req.onText?.(next.text);
           return next;
         },
       };
@@ -436,7 +436,7 @@ describe.skipIf(!hasTestDb)("Ask AI — what a question may read", () => {
       const saved = entry?.newValue as { question: string; outcome: string; model: string; steps: { sql: string; rows: number }[] };
       expect(saved.question).toBe(question);
       expect(saved.outcome).toBe("answered");
-      expect(saved.model).toBe("test-model");
+      expect(saved.model).toBe("test:test-model");
       expect(saved.steps[0]).toMatchObject({ sql: "SELECT employee_name, month, net FROM payslips ORDER BY month", rows: 1 });
       expect(JSON.stringify(entry?.newValue)).not.toContain("41000");
     });
@@ -474,14 +474,14 @@ describe.skipIf(!hasTestDb)("Ask AI — what a question may read", () => {
     it("follows the Board's switch and the limit on questions", async () => {
       const admin: Actor = { ...approver, simple: true };
       expect(await askStatus(employee)).toMatchObject({ allowed: true, audience: "everyone" });
-      await updateSetting(admin, "ask", { audience: "staff" });
+      await updateSetting(admin, "ask", { ...SETTING_DEFAULTS.ask, audience: "staff" });
       expect((await askStatus(employee)).allowed).toBe(false);
       expect((await askStatus(hr)).allowed).toBe(true);
       await expect(run(employee, "Anything", [say("no")])).rejects.toMatchObject({ status: 403 });
-      await updateSetting(admin, "ask", { audience: "off" });
+      await updateSetting(admin, "ask", { ...SETTING_DEFAULTS.ask, audience: "off" });
       await expect(run(hr, "Anything", [say("no")])).rejects.toMatchObject({ status: 403 });
-      await expect(updateSetting(hr, "ask", { audience: "everyone" })).rejects.toThrow();
-      await updateSetting(admin, "ask", { audience: "everyone" });
+      await expect(updateSetting(hr, "ask", { ...SETTING_DEFAULTS.ask, audience: "everyone" })).rejects.toThrow();
+      await updateSetting(admin, "ask", { ...SETTING_DEFAULTS.ask, audience: "everyone" });
       for (let i = 0; i < 30; i++) await run(employee, "Hello there", [say("Hello.")]);
       await expect(run(employee, "One more", [say("no")])).rejects.toMatchObject({ status: 429 });
     });

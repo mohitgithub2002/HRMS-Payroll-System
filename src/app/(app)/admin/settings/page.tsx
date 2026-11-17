@@ -10,7 +10,7 @@ import { requireActor } from "@/lib/auth/session";
 import { CONNECTORS } from "@/lib/connectors/types";
 import { env } from "@/lib/env";
 import { getT } from "@/lib/i18n/server";
-import { askConfigured } from "@/modules/ask/model";
+import { askConfig, canConfigureAsk } from "@/modules/ask/config";
 import { askRoleReady } from "@/modules/ask/runner";
 import { getAllSettings } from "@/modules/settings/service";
 import { AskCard } from "./ask-card";
@@ -30,7 +30,7 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
       <WorkflowCard initial={settings.workflow.mode} readOnly={!canEdit && !isFullAdmin(actor)} />
-      <AskCard initial={settings.ask.audience} readOnly={!canEdit && !isFullAdmin(actor)} configured={askConfigured()} roleReady={await askRoleReady()} canWriteDocs={canManageKnowledge(actor)} />
+      <AskCard initial={await askConfig(actor.boardId)} readOnly={!canConfigureAsk(actor)} roleReady={await askRoleReady()} canWriteDocs={canManageKnowledge(actor)} />
       <SettingsForms initial={settings} readOnly={!canEdit} smsForcedConsole={env().SMS_PROVIDER === "console"} />
 
       <Card className="mt-6">

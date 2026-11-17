@@ -120,6 +120,14 @@ export const settingsSchemas = {
    */
   ask: z.object({
     audience: z.enum(["off", "staff", "everyone"]),
+    /** The AI service that answers. Its API key is not a setting: it is kept apart, encrypted (modules/ask/config.ts). */
+    provider: z.enum(["gemini", "openai", "claude"]),
+    /** The model asked at each service — a name as the service lists it. */
+    models: z.object({
+      gemini: z.string().trim().min(1, "validation.required").max(80).regex(/^[A-Za-z0-9._:\/-]+$/, "validation.invalid"),
+      openai: z.string().trim().min(1, "validation.required").max(80).regex(/^[A-Za-z0-9._:\/-]+$/, "validation.invalid"),
+      claude: z.string().trim().min(1, "validation.required").max(80).regex(/^[A-Za-z0-9._:\/-]+$/, "validation.invalid"),
+    }),
   }),
 } as const;
 
@@ -149,7 +157,8 @@ export const SETTING_DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   // PRD §6: each section locks its month by the 25th.
   general: { attendanceLockDay: 25 },
   workflow: { mode: "simple" },
-  ask: { audience: "everyone" },
+  // Gemini is the Board's default AI service (the same names as DEFAULT_ASK_MODELS in modules/ask/model.ts).
+  ask: { audience: "everyone", provider: "gemini", models: { gemini: "gemini-3.8-flash", openai: "gpt-5.5", claude: "claude-opus-5-5" } },
   // Central government office hours in Delhi; to confirm for DCB (PRD §18).
   attendance: { officeStart: "09:00", graceMinutes: 15, halfDayMinutes: 240, weeklyOff: [0, 6], devices: [] },
   statutory: {

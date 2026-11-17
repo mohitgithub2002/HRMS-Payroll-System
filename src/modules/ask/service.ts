@@ -10,9 +10,9 @@ import { AppError, forbidden, RateLimitError } from "@/lib/errors";
 import type { TKey } from "@/lib/i18n";
 import { hit, type Limit } from "@/lib/rate-limit";
 import { ensureCredits } from "@/modules/leave/balance";
-import { getSetting } from "@/modules/settings/service";
+import { askConfig, askModelFor } from "./config";
 import { knowledgeTitles, readKnowledge, searchKnowledge } from "./knowledge";
-import { askConfigured, askIsPractice, askModel, type AskMessage, type AskModel, type AskTool } from "./model";
+import { AskModelError, type AskModel, type AskToolDef, type AskToolResult, type AskTurn } from "./model";
 import { buildSystemPrompt } from "./prompt";
 import { runAskSql, type AskCell, type AskColumnOut } from "./runner";
 import { askScope, type AskScope } from "./scope";
@@ -65,14 +65,13 @@ export type AskEvent =
   /** `key` is a line of the dictionary (ask.errors.…); the API sends it translated. */
   | { type: "error"; key: TKey; code: string };
 
-const TOOLS: AskTool[] = [
+const TOOLS: AskToolDef[] = [
   {
     name: "run_sql",
     description:
       "Run one read-only PostgreSQL SELECT over the views described in the instructions and get the rows back as JSON ({ columns, rows, row_count, truncated }). " +
       "Use it for every fact about the Board's records. A refusal or a database error comes back as { error } — correct the statement, or tell the person when the error says the information is not available to them.",
-    eager_input_streaming: true,
-    input_schema: {
+    parameters: {
       type: "object",
       properties: {
         sql: { type: "string", description: "One SELECT statement (WITH … SELECT allowed). Views are named without a schema." },
@@ -87,8 +86,7 @@ const TOOLS: AskTool[] = [
     description:
       "Search the Board's own documents (policies, office orders, circulars, how-to notes) that this person may read. Returns the best passages with the document's title and number. " +
       "Use it for questions about rules, entitlements and procedures. Search with the words the document would use, in English or Hindi.",
-    eager_input_streaming: true,
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { query: { type: "string", description: "The words to look for." } },
       required: ["query"],
@@ -98,8 +96,7 @@ const TOOLS: AskTool[] = [
   {
     name: "read_document",
     description: "Read one whole document of the Board by the id shown in the instructions or in a search result, when a passage is not enough.",
-    eager_input_streaming: true,
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { id: { type: "string", description: "The document id." } },
       required: ["id"],
@@ -114,8 +111,8 @@ const readInput = z.object({ id: z.string().min(1).max(60) });
 
 /** What the screen needs to know before the first question. */
 export async function askStatus(actor: Actor) {
-  const audience = (await getSetting(actor.boardId, "ask")).audience;
-  return { allowed: canUseAsk(actor, audience), configured: askConfigured(), practice: askIsPractice(), audience };
+  const config = await askConfig(actor.boardId);
+  return { allowed: canUseAsk(actor, config.audience), configured: config.ready, practice: config.practice, audience: config.audience };
 }
 
 /** Rows as the model reads them: whole rows only, as many as fit. */
@@ -164,15 +161,16 @@ export async function ask(actor: Actor, raw: unknown, emit: (e: AskEvent) => voi
 }
 
 async function answer(actor: Actor, input: AskInput, emit: (e: AskEvent) => void, opts: AskOptions): Promise<void> {
-  const model = opts.model ?? askModel();
   const scope: AskScope = askScope(actor);
   const started = Date.now();
   const steps: AskStep[] = [];
   let table: AskTable | null = null;
   let outcome: "answered" | "failed" | "stopped" = "failed";
-  let modelName = model.id;
+  let modelName = opts.model?.id ?? "";
 
   try {
+    const model = opts.model ?? (await askModelFor(actor.boardId));
+    modelName = model.id;
     // Leave credits due on 1 January and 1 July are posted the first time leave is looked at, as on the leave screens.
     if (scope.reach.leave !== "none") await ensureCredits(actor.boardId).catch(() => undefined);
     const [board, documents, me] = await Promise.all([
@@ -197,7 +195,10 @@ async function answer(actor: Actor, input: AskInput, emit: (e: AskEvent) => void
       documents,
     });
 
-    const messages: AskMessage[] = [...input.history.filter((h) => h.text.trim()).map((h) => ({ role: h.role, content: h.text })), { role: "user", content: input.question }];
+    const turns: AskTurn[] = [
+      ...input.history.filter((h) => h.text.trim()).map((h): AskTurn => (h.role === "user" ? { role: "user", text: h.text } : { role: "assistant", text: h.text, calls: [] })),
+      { role: "user", text: input.question },
+    ];
     let toolCalls = 0;
 
     for (let turn = 1; turn <= MAX_MODEL_TURNS; turn++) {
@@ -206,26 +207,26 @@ async function answer(actor: Actor, input: AskInput, emit: (e: AskEvent) => void
       const reply = await model.reply({
         system,
         tools: TOOLS,
-        messages,
+        turns,
         signal: opts.signal,
         onText: (delta) => {
           wrote = true;
           emit({ type: "text", delta });
         },
       });
-      if (reply.model) modelName = reply.model;
-      const text = reply.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();
-      const calls = reply.content.filter((b) => b.type === "tool_use");
+      if (reply.model) modelName = `${model.id.split(":")[0]}:${reply.model}`;
+      const text = reply.text.trim();
+      const calls = reply.calls;
 
       // A refusal or a cut-off reply can leave a tool call half-written: never run the tools of such a turn.
-      if (reply.stop_reason === "refusal") {
+      if (reply.stop === "refusal") {
         outcome = "stopped";
         emit({ type: "error", code: "declined", key: "ask.errors.declined" });
         return;
       }
-      if (reply.stop_reason === "max_tokens" && calls.length) throw new AppError(502, "ask_model_error", "ask.errors.failed");
+      if (reply.stop === "length" && calls.length) throw new AppError(502, "ask_model_error", "ask.errors.failed");
 
-      if (reply.stop_reason !== "tool_use" || !calls.length) {
+      if (reply.stop !== "tools" || !calls.length) {
         if (!text) throw new AppError(502, "ask_model_error", "ask.errors.failed");
         outcome = "answered";
         emit({ type: "done", answer: text, steps, table });
@@ -233,9 +234,9 @@ async function answer(actor: Actor, input: AskInput, emit: (e: AskEvent) => void
       }
 
       if (wrote) emit({ type: "clear" });
-      messages.push({ role: "assistant", content: reply.content });
+      turns.push({ role: "assistant", text: reply.text, calls, raw: reply.raw });
 
-      const results: Extract<AskMessage["content"], unknown[]>[number][] = [];
+      const results: AskToolResult[] = [];
       for (const c of calls) {
         toolCalls += 1;
         let content: string;
@@ -296,16 +297,21 @@ async function answer(actor: Actor, input: AskInput, emit: (e: AskEvent) => void
           content = JSON.stringify({ error: `There is no tool called ${c.name}.` });
           isError = true;
         }
-        results.push({ type: "tool_result", tool_use_id: c.id, content, ...(isError ? { is_error: true } : {}) });
+        results.push({ id: c.id, name: c.name, content, isError });
       }
       // All results of one step go back together. On the last step allowed, say so.
-      if (turn === MAX_MODEL_TURNS - 1) results.push({ type: "text", text: "This is the last look-up for this question. Answer now with what you have, and say what you could not find." });
-      messages.push({ role: "user", content: results });
+      turns.push({ role: "tool", results, ...(turn === MAX_MODEL_TURNS - 1 ? { note: "This is the last look-up for this question. Answer now with what you have, and say what you could not find." } : {}) });
     }
     throw new AppError(502, "ask_too_long", "ask.errors.tooLong");
   } catch (e) {
     if (opts.signal?.aborted) {
       outcome = "stopped";
+      return;
+    }
+    // Trouble at the AI service: said in plain words to the person; the service's own message goes to the server log.
+    if (e instanceof AskModelError) {
+      console.error(`[ask] ${modelName || "model"}: ${e.kind} — ${e.detail}`);
+      emit({ type: "error", code: `ask_${e.kind}`, key: e.kind === "auth" ? "ask.errors.notSetUp" : e.kind === "busy" ? "ask.errors.busy" : e.kind === "unreachable" ? "ask.errors.unreachable" : "ask.errors.failed" });
       return;
     }
     const appError = e instanceof AppError ? e : null;

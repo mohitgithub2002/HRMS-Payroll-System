@@ -1,7 +1,7 @@
 /**
- * Ask AI: a stand-in for the language model that follows a few fixed rules. It lets the browser checks and practice
+ * Ask AI: a stand-in for the AI service that follows a few fixed rules. It lets the browser checks and practice
  * copies without an API key go through the real path — the guard, the read-only role, the person's pass — with
- * answers that are the same every time. It is never used on a production copy (model.ts).
+ * answers that are the same every time. It is never used on a production copy (config.ts).
  *
  * What it understands:
  *   "sql: <statement>"            runs the statement (handy for showing what a login can and cannot read)
@@ -10,32 +10,28 @@
  *   "… how many employees …"      people on the rolls the person can see
  *   "… policy / rule / order …"   searches the Board's documents
  */
-import type { AskModel, AskReply, AskMessage } from "./model";
+import type { AskModel, AskReply, AskTurn } from "./model";
 
-const text = (t: string): AskReply => ({ content: [{ type: "text", text: t, citations: null }], stop_reason: "end_turn" });
+const text = (t: string): AskReply => ({ text: t, calls: [], stop: "end", raw: { provider: "scripted", data: null } });
 const call = (name: string, input: Record<string, unknown>): AskReply => ({
-  content: [{ type: "tool_use", id: `toolu_practice_${Math.random().toString(36).slice(2, 10)}`, name, input }],
-  stop_reason: "tool_use",
+  text: "",
+  calls: [{ id: `practice_${Math.random().toString(36).slice(2, 10)}`, name, input }],
+  stop: "tools",
+  raw: { provider: "scripted", data: null },
 });
 
-function lastUserText(messages: AskMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]!;
-    if (m.role !== "user") continue;
-    if (typeof m.content === "string") return m.content;
-    const t = m.content.find((b) => b.type === "text");
-    if (t && t.type === "text") return t.text;
+function lastUserText(turns: AskTurn[]): string {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i]!;
+    if (t.role === "user") return t.text;
   }
   return "";
 }
 
 /** The results of the tools asked for in the last step, if that is where the conversation stands. */
-function pendingResults(messages: AskMessage[]): string[] | null {
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== "user" || typeof last.content === "string") return null;
-  const results = last.content.filter((b) => b.type === "tool_result");
-  if (!results.length) return null;
-  return results.map((r) => (r.type !== "tool_result" ? "" : typeof r.content === "string" ? r.content : (r.content ?? []).map((c) => (c.type === "text" ? c.text : "")).join("")));
+function pendingResults(turns: AskTurn[]): string[] | null {
+  const last = turns[turns.length - 1];
+  return last?.role === "tool" && last.results.length ? last.results.map((r) => r.content) : null;
 }
 
 const cellText = (v: unknown) => (v === null || v === undefined ? "—" : String(v).replace(/\|/g, "/"));
@@ -68,15 +64,15 @@ function describe(result: string): string {
 
 export const scriptedModel: AskModel = {
   id: "practice",
-  async reply({ messages, onText }) {
+  async reply({ turns, onText }) {
     const say = (t: string) => {
       onText?.(t);
       return text(t);
     };
-    const results = pendingResults(messages);
+    const results = pendingResults(turns);
     if (results) return say(results.map(describe).join("\n\n"));
 
-    const q = lastUserText(messages).trim();
+    const q = lastUserText(turns).trim();
     const lower = q.toLowerCase();
     if (lower.startsWith("sql:")) return call("run_sql", { sql: q.slice(4).trim(), purpose: "Practice statement" });
     if (/\bleave\b.*\b(balance|left|have)\b|छुट्टी बची|अवकाश शेष/.test(lower)) {

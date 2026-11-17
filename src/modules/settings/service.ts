@@ -26,7 +26,8 @@ export async function getAllSettings(boardId: string) {
 /** S-82: only the User & settings manager may change settings (and the Admin, in the simple way of working). */
 export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, value: unknown) {
   // How work is approved is the Board's own decision: its Admin may always change it.
-  if (!canManageUsers(actor) && !(key === "workflow" && isFullAdmin(actor))) throw forbidden();
+  // Who may use Ask AI is the Board's decision too.
+  if (!canManageUsers(actor) && !((key === "workflow" || key === "ask") && isFullAdmin(actor))) throw forbidden();
   const parsed = settingsSchemas[key].parse(value) as SettingValue<K>;
   const saved = await db.$transaction(async (tx) => {
     const before = await getSetting(actor.boardId, key, tx);

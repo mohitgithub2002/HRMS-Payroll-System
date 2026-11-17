@@ -1,3 +1,4 @@
+import { askHi } from "./ask.hi";
 import { easyHi } from "./easy.hi";
 import type { en } from "./en";
 import type { DeepStrings } from "./types";
@@ -3906,4 +3907,5 @@ export const hi: DeepStrings<typeof en> = {
     noAccessBody: "आपके लॉगिन में यह स्क्रीन शामिल नहीं है। ज़रूरत हो तो उपयोगकर्ता एवं सेटिंग प्रबंधक से कहें।",
   },
   easy: easyHi,
+  ask: askHi,
 };

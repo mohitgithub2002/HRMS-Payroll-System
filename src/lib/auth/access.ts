@@ -265,3 +265,33 @@ export function permissionConflicts(perms: readonly Permission[], simple = false
   }
   return null;
 }
+
+// ── Ask AI (client add-on) ──────────────────────────────────────────────────────────────────────────────────────
+
+export type KnowledgeAudienceKey = "EVERYONE" | "STAFF" | "ADMIN";
+
+/**
+ * Who writes the Board's documents for Ask AI (policies, orders, circulars): the Board's Admin — and, in the simple
+ * way of working, the HR manager, who decides everything about people.
+ */
+export function canManageKnowledge(p: Principal): boolean {
+  if (isFullAdmin(p)) return true;
+  return Boolean(p.simple) && p.loginType === "HR_ACCOUNTS" && p.permissions.includes("HR");
+}
+
+/** The documents a login may read through Ask AI: for everyone, for office staff, for the Board's Admin. */
+export function knowledgeAudiences(p: Principal): KnowledgeAudienceKey[] {
+  const out: KnowledgeAudienceKey[] = ["EVERYONE"];
+  if (p.loginType === "ADMIN" || p.loginType === "HR_ACCOUNTS") out.push("STAFF");
+  if (isFullAdmin(p)) out.push("ADMIN");
+  return out;
+}
+
+/** Ask AI is open to: nobody, office staff (Admin and HR & Accounts logins), or every login. */
+export type AskAudience = "off" | "staff" | "everyone";
+
+export function canUseAsk(p: Principal, audience: AskAudience): boolean {
+  if (audience === "off") return false;
+  if (audience === "staff") return p.loginType === "ADMIN" || p.loginType === "HR_ACCOUNTS";
+  return true;
+}

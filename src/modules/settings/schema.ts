@@ -114,6 +114,13 @@ export const settingsSchemas = {
       .refine((types) => new Set(types.map((x) => x.code)).size === types.length, "settings.docCodeTwice")
       .refine((types) => types.some((x) => x.code === "OTHER" && x.active), "settings.docOtherNeeded"),
   }),
+  /**
+   * Ask AI (client add-on): who may ask questions in plain words. Answers come only from what the person may already
+   * see; this switch decides who gets the screen at all. It needs an API key on the server (docs/DEPLOYMENT.md).
+   */
+  ask: z.object({
+    audience: z.enum(["off", "staff", "everyone"]),
+  }),
 } as const;
 
 export type SettingKey = keyof typeof settingsSchemas;
@@ -142,6 +149,7 @@ export const SETTING_DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   // PRD §6: each section locks its month by the 25th.
   general: { attendanceLockDay: 25 },
   workflow: { mode: "simple" },
+  ask: { audience: "everyone" },
   // Central government office hours in Delhi; to confirm for DCB (PRD §18).
   attendance: { officeStart: "09:00", graceMinutes: 15, halfDayMinutes: 240, weeklyOff: [0, 6], devices: [] },
   statutory: {

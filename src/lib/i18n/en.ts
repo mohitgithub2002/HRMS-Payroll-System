@@ -1,3 +1,4 @@
+import { askEn } from "./ask.en";
 import { easyEn } from "./easy.en";
 /**
  * English text. Simple words, short sentences, government terms where clerks expect them
@@ -3904,4 +3905,5 @@ export const en = {
     noAccessBody: "Your login does not include this screen. Ask the User & settings manager if you need it.",
   },
   easy: easyEn,
+  ask: askEn,
 } as const;

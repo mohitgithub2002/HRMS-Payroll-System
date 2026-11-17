@@ -27,6 +27,46 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 
 ## Change log (newest first)
 
+### 2026-11-17 — Pages answer in a fraction of the time: fewer trips to the database, one after another ✅
+Asked by the client: "the app is very very slow — a single page change takes too much time; find the root cause."
+
+**Root cause (measured)** — not the code's speed: on the server every page takes 15–80 ms against a nearby database.
+It is how many times a page waits for the database **one after another**. Each wait costs a round trip; on a hosted
+database that is 1–2 ms in the same region and about 200 ms between Washington (Vercel's default) and Mumbai. Timed
+with the production build and a database 40 ms away:
+
+| | before | after |
+|---|---|---|
+| Home (Admin, HR, Accounts) | 1.2–1.4 s · about 30 waits | 0.2–0.3 s · 4–6 waits |
+| Attendance | 0.83 s · 20 waits | 0.19 s · 4 waits |
+| My attendance | 0.49 s · 12 waits | 0.14 s · 3 waits |
+| Any other page | 0.22–0.40 s · 5–9 waits | 0.10–0.22 s · 2–5 waits |
+
+At 200 ms a round trip Home went from about 6 s to about 1 s, and every other page from about 1 s to 0.4 s.
+
+**Fixed**
+- **Every page and API call** read the session, then the login, then the employee record, then the pension, then the
+  way of working, then wrote "last seen" — six waits before any work. Now one query does the reading, and the "last
+  seen" write happens after the response. The layout's two counts (approvals waiting, Ask) are read together.
+- **Home** asked its tiles one after another (about 25 waits) and some things twice (attendance locks due, filings
+  due, the pensioner's record). Every tile and every to-do item now reads at the same time; each shared answer is
+  worked out once per page. The daily jobs it starts (retirements, exits, reminders) run after the response.
+- **The attendance "today" board** (Home, Attendance) read each section's day separately — twelve waits for twelve
+  sections. It reads everyone's day once and splits it by section in memory. The section register (Attendance,
+  month lock), My attendance and the lock overview read what they need together instead of in a row.
+- **Settings** reads all settings in one query, and Ask's database-role check is remembered once it succeeds.
+- **A click shows the next screen at once**: a loading outline while the data arrives (before, a click seemed to do
+  nothing until the whole page was there).
+- `PERF_LOG_QUERIES=1` writes each query and its time to the server log, to find the next slow page.
+
+**To do on the Vercel copy** — set the Function Region to the database's region (Vercel → Settings → Functions; `bom1`
+for a database in Mumbai). That is the single biggest gain left, and only the account owner can change it
+(docs/DEPLOYMENT.md §12). A database that sleeps when idle (Neon's free plan) also adds a second or so to the first
+page after a quiet spell.
+
+**Verified** — typecheck, lint, 519 unit and integration tests, production build, all 70 browser checks that apply on
+this date (the Form 24Q check waits for a finished quarter), and the timings above before and after.
+
 ### 2026-11-17 — Ask redesigned; the month lock no longer times out ✅
 **Asked by the client:** "the Ask AI has a very bad UI … add the Ask AI button in the sidebar, keep the message box at
 the bottom of the page, make it feel premium — inspiration from ChatGPT and Claude"; and an error while reviewing and

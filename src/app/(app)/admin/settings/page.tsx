@@ -23,14 +23,15 @@ export default async function SettingsPage() {
   const actor = await requireActor();
   if (!can(actor, "users_settings", "view")) return <NoAccess />;
   const { t } = await getT();
-  const settings = await getAllSettings(actor.boardId);
+  // All at once: the settings, Ask's service and keys, and whether Ask's database role is in place.
+  const [settings, askSetup, roleReady] = await Promise.all([getAllSettings(actor.boardId), askConfig(actor.boardId), askRoleReady()]);
   const canEdit = canManageUsers(actor);
 
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
       <WorkflowCard initial={settings.workflow.mode} readOnly={!canEdit && !isFullAdmin(actor)} />
-      <AskCard initial={await askConfig(actor.boardId)} readOnly={!canConfigureAsk(actor)} roleReady={await askRoleReady()} canWriteDocs={canManageKnowledge(actor)} />
+      <AskCard initial={askSetup} readOnly={!canConfigureAsk(actor)} roleReady={roleReady} canWriteDocs={canManageKnowledge(actor)} />
       <SettingsForms initial={settings} readOnly={!canEdit} smsForcedConsole={env().SMS_PROVIDER === "console"} />
 
       <Card className="mt-6">

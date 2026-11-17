@@ -15,9 +15,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // First sign-in with a temporary password: set your own before doing anything else.
   if (actor.mustChangePassword && !path.startsWith("/profile")) redirect("/profile?setup=1");
 
-  const inbox = hasApprovalsInbox(actor) ? await countInbox(actor) : null;
+  // Both at once: each is a trip to the database, and every page waits for the layout.
+  const [inbox, askSetup] = await Promise.all([hasApprovalsInbox(actor) ? countInbox(actor) : Promise.resolve(null), askConfig(actor.boardId)]);
   // Ask AI: shown when the Board has opened it for this login. Admins also see it before a key is set, with what to do.
-  const askSetup = await askConfig(actor.boardId);
   const ask = canUseAsk(actor, askSetup.audience) && (askSetup.ready || actor.loginType === "ADMIN");
   return (
     <AppShell

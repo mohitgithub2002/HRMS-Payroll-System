@@ -315,6 +315,10 @@ about a second; a production-size database restores well inside the 4-hour limit
 
 ---
 
+**Finding a slow page.** With `PERF_LOG_QUERIES=1` the server writes each database query and its time to the log
+(`[q] 1.2ms SELECT …`, no values). A page should need only a few round trips one after another; a long run of the
+same query shape is a loop that should read in one go.
+
 ## 10. Before go-live checklist
 
 Security and access
@@ -370,7 +374,10 @@ Vercel is fine for **showing the product** (a training or demo copy). It is **no
 written there vanish between runs, and the data must stay on government cloud in India (§16).
 
 1. **Database**: a hosted PostgreSQL 16 (Neon, Supabase…). Use `?sslmode=verify-full` in the URL (this also
-   silences pg's SSL-mode warning). Create the tables and the demo data once from your machine:
+   silences pg's SSL-mode warning). **Put the database and the Vercel functions in the same region** (Vercel →
+   Settings → Functions → Function Region; for Neon or Supabase in Mumbai choose `bom1`). Every page waits for a
+   few round trips to the database; from Washington (Vercel's default, `iad1`) to Mumbai each one is about 200 ms,
+   which makes every page feel slow however fast the code is. In the same region a round trip is 1–2 ms. Create the tables and the demo data once from your machine:
    ```bash
    DATABASE_URL="<hosted url>" APP_ENV=training npx prisma migrate deploy
    DATABASE_URL="<hosted url>" APP_ENV=training DATA_ENCRYPTION_KEY=… BLIND_INDEX_KEY=… OTP_PEPPER=… npx prisma db seed

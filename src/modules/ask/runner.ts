@@ -164,8 +164,16 @@ export async function runAskSql(scope: AskScope, rawSql: unknown): Promise<SqlOu
   }
 }
 
-/** Is the read-only role there and usable? (Shown to the Admin when it is not.) */
+/** Is the read-only role there and usable? (Shown to the Admin when it is not.) A yes is remembered for a while. */
 export async function askRoleReady(): Promise<boolean> {
+  const memo = globalThis as unknown as { __dcbAskRoleOk?: number };
+  if (memo.__dcbAskRoleOk && Date.now() - memo.__dcbAskRoleOk < 10 * 60_000) return true;
+  const ok = await checkAskRole();
+  if (ok) memo.__dcbAskRoleOk = Date.now();
+  return ok;
+}
+
+async function checkAskRole(): Promise<boolean> {
   try {
     const client = await pool().connect();
     try {

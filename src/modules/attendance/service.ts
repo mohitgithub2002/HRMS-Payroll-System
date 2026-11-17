@@ -1,5 +1,5 @@
 import "server-only";
-import type { AttendanceDay, DayStatus, Employee, Prisma, Section } from "@/generated/prisma/client";
+import type { AttendanceDay, DayStatus, Employee, LeaveType, Prisma, Section } from "@/generated/prisma/client";
 import { pendingFor, submitForApproval } from "@/lib/approvals/engine";
 import type { ApprovalDetails } from "@/lib/approvals/details";
 import { audit } from "@/lib/audit";
@@ -193,18 +193,33 @@ interface BuildInput {
   tx?: DbLike;
 }
 
-async function buildRows(input: BuildInput): Promise<RegisterRow[]> {
-  const { dates, employees, rules } = input;
-  const from = dates[0];
-  const to = dates[dates.length - 1];
-  const ids = employees.map((e) => e.id);
+/** What a month's rows are worked out from — read in one go for any number of people (and sections). */
+interface DayData {
+  holidays: Awaited<ReturnType<typeof gazettedHolidays>>;
+  punches: Awaited<ReturnType<typeof punchesBetween>>;
+  saved: Awaited<ReturnType<typeof savedBetween>>;
+  leavePay: Map<string, LeaveType["pay"]>;
+}
+
+async function loadDayData(boardId: string, employeeIds: string[], from: ISODate, to: ISODate, tx?: DbLike): Promise<DayData> {
   const [holidays, punches, saved, leaveTypes] = await Promise.all([
-    gazettedHolidays(input.boardId, from, to, input.tx),
-    punchesBetween(ids, from, to, input.tx),
-    savedBetween(ids, from, to, input.tx),
-    (input.tx ?? db).leaveType.findMany({ where: { boardId: input.boardId }, select: { code: true, pay: true } }),
+    gazettedHolidays(boardId, from, to, tx),
+    punchesBetween(employeeIds, from, to, tx),
+    savedBetween(employeeIds, from, to, tx),
+    (tx ?? db).leaveType.findMany({ where: { boardId }, select: { code: true, pay: true } }),
   ]);
-  const leavePay = new Map(leaveTypes.map((l) => [l.code, l.pay]));
+  return { holidays, punches, saved, leavePay: new Map(leaveTypes.map((l) => [l.code, l.pay])) };
+}
+
+async function buildRows(input: BuildInput): Promise<RegisterRow[]> {
+  const data = await loadDayData(input.boardId, input.employees.map((e) => e.id), input.dates[0], input.dates[input.dates.length - 1], input.tx);
+  return rowsFrom(input, data);
+}
+
+/** The rows from data already read: no database here, so many sections can share one read. */
+function rowsFrom(input: Omit<BuildInput, "tx">, data: DayData): RegisterRow[] {
+  const { dates, employees, rules } = input;
+  const { holidays, punches, saved, leavePay } = data;
   const weeklyOff = weeklyOffFor(input.section.weeklyOff, rules.weeklyOff);
   const holidaySet = new Set(holidays.keys());
   return employees.map((e) => {
@@ -262,21 +277,27 @@ async function pendingMuster(boardId: string, sectionId: string, month: string, 
 /** S-30: one section's month — every person, every day, with totals. */
 export async function sectionRegister(actor: Actor, sectionId: string, month: string) {
   if (!canViewSection(actor, sectionId)) throw forbidden();
-  const section = await db.section.findFirst({ where: { id: sectionId, boardId: actor.boardId } });
-  if (!section) throw notFound();
   const today = todayIST();
-  const rules = await attendanceRules(actor.boardId);
   const { dates, from, to } = monthRange(month);
-  const employees = await employeesOn(actor.boardId, { sectionId }, from, to);
-  const task = await pendingMuster(actor.boardId, sectionId, month);
+  // Two rounds to the database instead of eight in a row: what the month needs, then the days themselves.
+  const [section, rules, employees, task, lock] = await Promise.all([
+    db.section.findFirst({ where: { id: sectionId, boardId: actor.boardId } }),
+    attendanceRules(actor.boardId),
+    employeesOn(actor.boardId, { sectionId }, from, to),
+    pendingMuster(actor.boardId, sectionId, month),
+    lockOf(actor.boardId, sectionId, month),
+  ]);
+  if (!section) throw notFound();
   const pending = new Map<string, DayStatus | null>();
   if (task) for (const e of (task.payload as unknown as MusterPayload).entries) pending.set(`${e.employeeId}|${e.date}`, e.status);
-  const rows = await buildRows({ boardId: actor.boardId, section, employees, dates, rules, today, pending });
-  const lock = await lockOf(actor.boardId, sectionId, month);
-  const holidays = await gazettedHolidays(actor.boardId, from, to);
-  const openRequests = await db.attendanceRequest.count({
-    where: { boardId: actor.boardId, status: "PENDING", employeeId: { in: employees.map((e) => e.id) }, date: { gte: fromISODate(from), lte: fromISODate(to) } },
-  });
+  const [data, openRequests] = await Promise.all([
+    loadDayData(actor.boardId, employees.map((e) => e.id), from, to),
+    db.attendanceRequest.count({
+      where: { boardId: actor.boardId, status: "PENDING", employeeId: { in: employees.map((e) => e.id) }, date: { gte: fromISODate(from), lte: fromISODate(to) } },
+    }),
+  ]);
+  const rows = rowsFrom({ boardId: actor.boardId, section, employees, dates, rules, today, pending }, data);
+  const holidays = data.holidays;
   return {
     section,
     month,
@@ -318,15 +339,19 @@ export async function todayBoard(actor: Actor) {
   const scope = sectionScope(actor);
   if (!scope) throw forbidden();
   const today = todayIST();
-  const rules = await attendanceRules(actor.boardId);
-  const sections = await visibleSections(actor);
-  const employees = await employeesOn(actor.boardId, scope === "all" ? {} : { sectionId: scope }, today, today);
-  const holidays = await gazettedHolidays(actor.boardId, today, today);
+  const [rules, sections, employees] = await Promise.all([
+    attendanceRules(actor.boardId),
+    visibleSections(actor),
+    employeesOn(actor.boardId, scope === "all" ? {} : { sectionId: scope }, today, today),
+  ]);
+  // Today's punches, days and holidays for everyone at once; then section by section in memory.
+  const data = await loadDayData(actor.boardId, employees.map((e) => e.id), today, today);
+  const holidays = data.holidays;
   const out: { section: Section; counts: TodayCounts; people: { id: string; code: string; name: string; nameHi: string | null; status: DayStatus | null; firstIn: Date | null }[] }[] = [];
   for (const section of sections) {
     const staff = employees.filter((e) => e.sectionId === section.id);
     if (staff.length === 0) continue;
-    const rows = await buildRows({ boardId: actor.boardId, section, employees: staff, dates: [today], rules, today });
+    const rows = rowsFrom({ boardId: actor.boardId, section, employees: staff, dates: [today], rules, today }, data);
     const counts: TodayCounts = { staff: staff.length, present: 0, late: 0, notIn: 0, onLeave: 0, onDuty: 0, off: 0, unmarked: 0 };
     for (const r of rows) {
       const d = r.days[0];
@@ -362,15 +387,20 @@ export async function todayBoard(actor: Actor) {
 
 export async function myAttendance(actor: Actor, month: string) {
   if (!actor.employeeId) throw forbidden();
-  const e = await db.employee.findUnique({ where: { id: actor.employeeId }, select: { ...empSelect, section: true } });
-  if (!e) throw notFound();
   const today = todayIST();
-  const rules = await attendanceRules(actor.boardId);
   const { dates, from, to } = monthRange(month);
-  const [row] = await buildRows({ boardId: actor.boardId, section: e.section, employees: [e], dates, rules, today });
-  const requests = await db.attendanceRequest.findMany({ where: { employeeId: e.id }, orderBy: { createdAt: "desc" }, take: 30 });
-  const lock = await lockOf(actor.boardId, e.sectionId, month);
-  const holidays = await db.holiday.findMany({ where: { boardId: actor.boardId, date: { gte: fromISODate(from), lte: fromISODate(to) } }, orderBy: { date: "asc" } });
+  const employeeId = actor.employeeId;
+  // The person's days, requests, the lock and the holidays all at once (the section is known from the session).
+  const [e, rules, data, requests, lock, holidays] = await Promise.all([
+    db.employee.findUnique({ where: { id: employeeId }, select: { ...empSelect, section: true } }),
+    attendanceRules(actor.boardId),
+    loadDayData(actor.boardId, [employeeId], from, to),
+    db.attendanceRequest.findMany({ where: { employeeId }, orderBy: { createdAt: "desc" }, take: 30 }),
+    actor.sectionId ? lockOf(actor.boardId, actor.sectionId, month) : Promise.resolve(null),
+    db.holiday.findMany({ where: { boardId: actor.boardId, date: { gte: fromISODate(from), lte: fromISODate(to) } }, orderBy: { date: "asc" } }),
+  ]);
+  if (!e) throw notFound();
+  const [row] = rowsFrom({ boardId: actor.boardId, section: e.section, employees: [e], dates, rules, today }, data);
   return {
     month,
     today,
@@ -781,10 +811,12 @@ export async function requestUnlock(actor: Actor, raw: unknown) {
 export async function lockOverview(actor: Actor, month: string) {
   const scope = sectionScope(actor);
   if (!scope) throw forbidden();
-  const sections = await visibleSections(actor);
-  const locks = await db.attendanceLock.findMany({ where: { boardId: actor.boardId, month, unlockedAt: null } });
+  const [sections, locks, counts] = await Promise.all([
+    visibleSections(actor),
+    db.attendanceLock.findMany({ where: { boardId: actor.boardId, month, unlockedAt: null } }),
+    db.employee.groupBy({ by: ["sectionId"], where: { boardId: actor.boardId, ...ON_ROLLS, status: { in: ["ACTIVE", "SUSPENDED"] } }, _count: true }),
+  ]);
   const byId = new Map(locks.map((l) => [l.sectionId, l]));
-  const counts = await db.employee.groupBy({ by: ["sectionId"], where: { boardId: actor.boardId, ...ON_ROLLS, status: { in: ["ACTIVE", "SUSPENDED"] } }, _count: true });
   const staff = new Map(counts.map((c) => [c.sectionId, c._count]));
   return sections.map((s) => ({ section: s, lock: byId.get(s.id) ?? null, staff: staff.get(s.id) ?? 0, canLock: canLockSection(actor, s.id) }));
 }
@@ -793,8 +825,8 @@ export async function lockOverview(actor: Actor, month: string) {
 export async function locksDue(actor: Actor) {
   const scope = scopeFor(actor, "attendance", "lock");
   if (!scope) return null;
-  const rules = await attendanceRules(actor.boardId);
-  const due = lockDue(todayIST(), rules.lockDay);
+  const general = await getSetting(actor.boardId, "general");
+  const due = lockDue(todayIST(), general.attendanceLockDay);
   const overview = await lockOverview(actor, due.month);
   const open = overview.filter((o) => o.canLock && !o.lock && o.staff > 0);
   return { ...due, open: open.map((o) => o.section) };

@@ -9,6 +9,7 @@ import {
   Briefcase,
   CalendarDays,
   ChevronDown,
+  ChevronRight,
   Fingerprint,
   HeartPulse,
   History,
@@ -27,6 +28,7 @@ import {
   Search,
   Send,
   Settings,
+  Sparkles,
   User,
   UserRound,
   Users,
@@ -123,6 +125,35 @@ function NavList({ menu, pathname, onNavigate }: { menu: MenuItem[]; pathname: s
   );
 }
 
+/**
+ * Ask AI in the sidebar: one button above the menu (it is not one of the menu's eight places), as the chat apps
+ * put "New chat". Light, not a second dark button on the screen.
+ */
+function AskButton({ pathname, onNavigate, testId }: { pathname: string; onNavigate?: () => void; testId?: string }) {
+  const t = useT();
+  const active = pathname === "/ask";
+  return (
+    <Link
+      href="/ask"
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      data-testid={testId}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-[0.9rem] font-semibold transition-all",
+        active
+          ? "border-brand-300 bg-brand-50 text-brand-900 shadow-[0_0_0_3px_rgb(211_243_224)]"
+          : "border-ink-200 bg-white text-ink-900 shadow-card hover:-translate-y-px hover:border-brand-300 hover:shadow-raised",
+      )}
+    >
+      <span className="ask-mark flex size-7 shrink-0 items-center justify-center rounded-lg text-white" aria-hidden="true">
+        <Sparkles className="size-3.5" />
+      </span>
+      <span className="truncate">{t("ask.nav")}</span>
+      <ChevronRight className="ml-auto size-4 text-ink-300 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-600" aria-hidden="true" />
+    </Link>
+  );
+}
+
 function Brand({ logo }: { logo: string }) {
   const t = useT();
   return (
@@ -196,6 +227,7 @@ export function AppShell({
   idleTimeoutMs,
   mobileBottomNav,
   employeeSearch = false,
+  ask = false,
   children,
 }: {
   menu: MenuItem[];
@@ -206,6 +238,8 @@ export function AppShell({
   mobileBottomNav: boolean;
   /** Logins that see the employee list get a search box: an exact Employee ID opens that person's full profile. */
   employeeSearch?: boolean;
+  /** Ask AI is open for this login: a button in the top bar, on every screen. */
+  ask?: boolean;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -213,6 +247,8 @@ export function AppShell({
   const [drawer, setDrawer] = useState(false);
 
   const bottomItems = menu.slice(0, 4);
+  // Ask AI fills the page under the top bar: the conversation scrolls and the question box stays at the bottom.
+  const immersive = pathname === "/ask";
 
   return (
     <div className="min-h-dvh">
@@ -225,6 +261,11 @@ export function AppShell({
         <div className="flex h-16 items-center border-b border-ink-100 px-4">
           <Brand logo={logo} />
         </div>
+        {ask && (
+          <div className="px-3 pt-4">
+            <AskButton pathname={pathname} testId="ask-link" />
+          </div>
+        )}
         <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4" aria-label={t("nav.menu")}>
           <NavList menu={menu} pathname={pathname} />
         </nav>
@@ -253,6 +294,11 @@ export function AppShell({
                 <X className="size-5" />
               </button>
             </div>
+            {ask && (
+              <div className="px-3 pt-4">
+                <AskButton pathname={pathname} onNavigate={() => setDrawer(false)} />
+              </div>
+            )}
             <nav className="flex-1 overflow-y-auto px-3 py-4">
               <NavList menu={menu} pathname={pathname} onNavigate={() => setDrawer(false)} />
             </nav>
@@ -289,6 +335,21 @@ export function AppShell({
             </form>
           )}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {ask && (
+              <Link
+                href="/ask"
+                aria-label={t("ask.nav")}
+                title={t("ask.nav")}
+                aria-current={pathname === "/ask" ? "page" : undefined}
+                data-testid="ask-link-mobile"
+                className={cn(
+                  "flex size-9 items-center justify-center rounded-full transition-colors lg:hidden",
+                  pathname === "/ask" ? "ask-mark text-white" : "bg-brand-50 text-brand-700 ring-1 ring-brand-600/20 hover:bg-brand-100",
+                )}
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+              </Link>
+            )}
             {inboxCount !== null && (
               <Link
                 href="/approvals"
@@ -309,21 +370,30 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main" className={cn("mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8", mobileBottomNav && "pb-28 lg:pb-8")}>
-          {children}
-        </main>
+        {immersive ? (
+          <main
+            id="main"
+            className={cn("fixed inset-x-0 top-16 z-10 flex flex-col lg:left-[17rem]", mobileBottomNav ? "bottom-[calc(4rem+1px+env(safe-area-inset-bottom))] lg:bottom-0" : "bottom-0")}
+          >
+            {children}
+          </main>
+        ) : (
+          <main id="main" className={cn("mx-auto w-full max-w-[90rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8", mobileBottomNav && "pb-28 lg:pb-8")}>
+            {children}
+          </main>
+        )}
       </div>
 
       {/* Phone bottom bar for employees and pensioners — last payslip is two taps away (PRD §1). */}
       {mobileBottomNav && (
         <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label={t("nav.menu")}>
-          <ul className="grid grid-cols-5">
+          <ul className="grid h-16 grid-cols-5">
             {bottomItems.map((item) => {
               const Icon = ICONS[item.icon];
               const active = isActive(pathname, item.href);
               return (
                 <li key={item.key}>
-                  <Link href={item.href} aria-current={active ? "page" : undefined} className={cn("flex flex-col items-center gap-1 px-1 py-2.5 text-[0.7rem] font-medium", active ? "text-brand-700" : "text-ink-500")}>
+                  <Link href={item.href} aria-current={active ? "page" : undefined} className={cn("flex h-full flex-col items-center justify-center gap-1 px-1 text-[0.7rem] font-medium", active ? "text-brand-700" : "text-ink-500")}>
                     <Icon className="size-5" aria-hidden="true" />
                     <span className="max-w-full truncate">{tDynamic(t, `navShort.${item.key}`)}</span>
                   </Link>
@@ -331,7 +401,7 @@ export function AppShell({
               );
             })}
             <li>
-              <button type="button" onClick={() => setDrawer(true)} className="flex w-full flex-col items-center gap-1 px-1 py-2.5 text-[0.7rem] font-medium text-ink-500">
+              <button type="button" onClick={() => setDrawer(true)} className="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-[0.7rem] font-medium text-ink-500">
                 <MoreHorizontal className="size-5" aria-hidden="true" />
                 <span>{t("nav.more")}</span>
               </button>

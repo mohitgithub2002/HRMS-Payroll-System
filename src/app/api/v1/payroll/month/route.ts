@@ -5,6 +5,9 @@ import { finishMonth, payMonth, workOutMonth } from "@/modules/payroll/simple";
 
 const schema = z.object({ month: z.string().refine(isMonth, "validation.invalid"), action: z.enum(["workOut", "pay", "finish"]) });
 
+/** Building and sending payslips can take a while for a big bill. */
+export const maxDuration = 60;
+
 /** The simple way of working: the whole month's salaries in one go — work out, pay, finish. */
 export const POST = apiRoute(async ({ actor, body }) => {
   const input = await body(schema);

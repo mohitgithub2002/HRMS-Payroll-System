@@ -320,6 +320,8 @@ describe.skipIf(!hasTestDb)("FoxPro migration (§15, S-90)", () => {
     expect(zip.file("csv/Employee.csv")).toBeTruthy();
     expect(zip.file("json/Session.json")).toBeNull();
     expect(zip.file("json/OtpChallenge.json")).toBeNull();
+    expect(zip.file("json/AskGrant.json")).toBeNull();
+    expect(zip.file("csv/KnowledgeDoc.csv")).toBeTruthy();
     const users = JSON.parse(await zip.file("json/User.json")!.async("string")) as Record<string, unknown>[];
     expect(users.length).toBeGreaterThan(0);
     expect(users.every((u) => !("passwordHash" in u))).toBe(true);

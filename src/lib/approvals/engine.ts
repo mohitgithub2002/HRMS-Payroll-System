@@ -204,7 +204,10 @@ export async function decide(actor: Actor, taskId: string, decision: Decision, n
       await emit(tx, actor.boardId, `${task.kind}.approved`, { type: task.entityType, id: task.entityId ?? task.id }, { taskId: task.id });
     }
     return { ...task, status };
-  });
+  },
+  // Approving applies the change in the same transaction: a month's muster or a bulk upload is a lot of rows, and a
+  // hosted database is further away than one on the same server.
+  { maxWait: 10_000, timeout: 30_000 });
   for (const fn of after) {
     try {
       await fn();

@@ -2011,3 +2011,68 @@ model ParallelDiff {
 
   @@index([runId])
 }
+
+// ─── Ask AI (client add-on): questions in plain words, answered from the records the person may see ──────────
+
+/// A pass that lives for a few seconds and says what one question may read: whose question it is and how far each
+/// area reaches (the whole Board, the person's section, their own record, or nothing). The views of the "ask" schema
+/// show rows only through the pass whose token is set on the connection; the SQL a model writes cannot read this table.
+model AskGrant {
+  /// 256 random bits; set on the connection as "ask.token".
+  token       String   @id
+  boardId     String
+  userId      String
+  employeeId  String?
+  sectionId   String?
+  pensionerId String?
+  /// { people, service, attendance, leave, payroll, loans, statutory, pension, rates, recruitment, users, audit }
+  /// → "all" | "section" | "own" | "system" | "none" (modules/ask/scope.ts).
+  scopes      Json
+  /// False for the User & settings manager: no pay, bank or identity value (PRD §2 rule 3).
+  sensitive   Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/// Who may read a document of the knowledge base through Ask AI.
+enum KnowledgeAudience {
+  /// Every login, employees and pensioners included.
+  EVERYONE
+  /// Admin and HR & Accounts logins.
+  STAFF
+  /// Admin logins only.
+  ADMIN
+}
+
+/// The Board's own words for Ask AI: policies, office orders, circulars and how-to notes, kept as text.
+model KnowledgeDoc {
+  id            String            @id @default(cuid())
+  boardId       String
+  title         String
+  /// POLICY, ORDER, CIRCULAR, RULES, HOWTO or OTHER.
+  category      String            @default("POLICY")
+  /// Order or circular number and date, when there is one.
+  reference     String?
+  body          String
+  audience      KnowledgeAudience @default(EVERYONE)
+  isActive      Boolean           @default(true)
+  createdById   String
+  createdByName String
+  updatedById   String?
+  updatedByName String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([boardId, isActive])
+}
+
+/// A stored file's bytes, when files are kept in the database rather than on disk (STORAGE_DRIVER=database — the
+/// default on Vercel, whose disk is not kept between requests). The key is the same as on disk (lib/storage.ts).
+model StoredFile {
+  key       String   @id
+  data      Bytes
+  size      Int
+  createdAt DateTime @default(now())
+}

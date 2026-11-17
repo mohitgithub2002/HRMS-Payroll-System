@@ -41,3 +41,18 @@
   `life-certificates.ts`, `tables.ts`, `ppo.ts`. Pension bills reuse the payroll run screen (`payroll/[id]/run-screen.tsx`)
   under `/pension/bills`; rights follow `fnOf(payGroup)`. Every pension slip carries `pensionerId`; salary-side readers
   filter `pensionerId: null`.
+- **Ask AI (client add-on):** `modules/ask/` — a person asks in plain words; a language model writes SELECTs; the system decides
+  what they may read. `scope.ts` (pure) turns the §14 matrix into a reach per area; `catalog.ts` (pure) lists the views
+  of the `ask` schema and for whom — it is both the guard's allowlist and the model's description; `sql-guard.ts`
+  checks every statement with PostgreSQL's own parser (allowlists: add a function or node type there, never loosen the
+  walk); `runner.ts` writes a 30-second pass (`AskGrant`) and runs the statement through `ask.run()` as the role
+  `dcb_ask`; `knowledge.ts` / `passages.ts` are the Board's documents; `service.ts` is the question loop and the
+  audit entry. The AI service is the Board's choice (Settings → Ask): `model.ts` (pure) is the neutral conversation
+  format; `model-gemini.ts` (the default), `model-openai.ts` (Responses API) and `model-claude.ts` are the adapters on
+  the official SDKs — each hands the service's own turn back unchanged (`raw`), which its reasoning needs;
+  `model-scripted.ts` is a stand-in for tests and practice copies; `config.ts` holds the choice and the API keys
+  (encrypted, in the settings row `askKeys` that the settings API cannot read; the environment is the fallback).
+  **The views are the access control**: a new table reaches Ask only through a view that filters by the pass — add it
+  in a new migration that carries the whole `ask_views` file (it drops and rebuilds the schema), list it in
+  `catalog.ts`, and add its reach to `tests/integration/ask.test.ts`. Never put an identity or account number in a
+  view. A migration that drops a column a view reads must drop the `ask` schema first and rebuild it after.

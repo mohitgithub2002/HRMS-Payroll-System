@@ -8,7 +8,14 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 function client(): PrismaClient {
   if (!globalForPrisma.prisma) {
     const adapter = new PrismaPg({ connectionString: env().DATABASE_URL });
-    globalForPrisma.prisma = new PrismaClient({ adapter });
+    // PERF_LOG_QUERIES=1: every query and its time in the server log (the SQL only, never the values) — to find
+    // a page that waits on too many round trips (docs/DEPLOYMENT.md §9).
+    const logQueries = Boolean(process.env.PERF_LOG_QUERIES);
+    globalForPrisma.prisma = new PrismaClient({ adapter, ...(logQueries ? { log: [{ emit: "event" as const, level: "query" as const }] } : {}) });
+    if (logQueries) {
+      const client = globalForPrisma.prisma as unknown as { $on: (e: "query", f: (q: { query: string; duration: number }) => void) => void };
+      client.$on("query", (q) => console.log(`[q] ${q.duration}ms ${q.query.replace(/\s+/g, " ").slice(0, 200)}`));
+    }
   }
   return globalForPrisma.prisma;
 }

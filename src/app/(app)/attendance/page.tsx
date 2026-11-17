@@ -127,7 +127,8 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                 <p className="text-sm text-ink-600">{board.holiday ? t("attendance.today.holidayToday", { name: board.holiday.name }) : t("attendance.today.allIn")}</p>
               </CardBody>
             ) : (
-              <ul className="max-h-[28rem] divide-y divide-ink-100 overflow-y-auto">
+              // A long list scrolls inside the card (early in the day nobody is in yet): reachable by keyboard.
+              <ul className="max-h-[28rem] divide-y divide-ink-100 overflow-y-auto" tabIndex={0} aria-label={t("attendance.today.notInList")}>
                 {notIn.map((p) => (
                   <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-2.5 sm:px-6">
                     <div className="min-w-0">

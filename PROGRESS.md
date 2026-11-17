@@ -19,12 +19,224 @@ The module checklist with PRD IDs is in [PLAN.md](./PLAN.md).
 | 10 | Reports, dashboards, migration & go-live | 🟢 Done & verified (go-live steps for the Board's IT cell in [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)) |
 | C | Client add-ons (DCB review: one-screen view, suspension & full and final settlement, arrears by days, DA & TA by year, scanned service books, Excel bank file, document types) | 🟢 Done & verified (subsistence allowance and document list to confirm with DCB) |
 | W | The simple way of working (client request: simple roles, direct entries, payroll in three steps) | 🟢 Done & verified (the Board chooses Simple or Two steps in Settings; Simple is the default) |
+| A | Ask — questions in plain words about the records and the Board's documents, within each login's rights; the AI service (Gemini by default, GPT or Claude) chosen in Settings (client request) | 🟡 Built & verified with stand-ins for the AI services; **one run with a real key is still to do**, and the Board decides whether records may be sent to an outside AI service |
 
 🟢 Done & verified · 🟡 In progress · ⚪ Pending
 
 ---
 
 ## Change log (newest first)
+
+### 2026-11-17 — Payslips and bank files download on Vercel ✅
+
+- **Cause.** Files were written to the function's own disk (`/tmp` on Vercel). Each Vercel function instance has its
+  own disk, so a bank file made by one could not be read by the instance that served the download, and every file
+  vanished when an instance was recycled. Payslip PDFs, built on request, could also run past the default function
+  time on a cold start (Chromium starting).
+- **Fix.** `lib/storage.ts` keeps files in the database table `StoredFile` when `STORAGE_DRIVER=database` (the
+  default when `VERCEL` is set; the disk folder stays the default elsewhere). Reading looks in the other store too,
+  so files made before a switch still open; a file that is in neither answers 410 with "make it again from its
+  screen" instead of a broken download. The seed's statutory files follow the same driver. The migration export
+  skips `StoredFile` (and `AskGrant`, and the encrypted `askKeys` row).
+- `maxDuration = 60` on the routes that build PDFs or files on request (payslips, run print, PPO, settlement, GPF
+  statement, letters, Form 16, leave ledger, printed migration report, file download, report export) and on the
+  routes that finish a month or send payslip notices.
+- **Finishing a month no longer waits for the e-mails.** Payslip notices (one PDF per slip) go out after the
+  response (`lib/background.ts` `afterResponse`; Home's daily jobs use it too); outside a request — the seed,
+  scripts, tests — the work is done there and then, so `payslipsSentAt` is set as before.
+- Tests: `tests/integration/storage.test.ts` (disk, database, either way round, 410); the payroll browser check waits
+  for the page to be ready before choosing the return file; the browser checks also pass with `STORAGE_DRIVER=database`.
+
+### 2026-11-17 — Pages answer in a fraction of the time: fewer trips to the database, one after another ✅
+Asked by the client: "the app is very very slow — a single page change takes too much time; find the root cause."
+
+**Root cause (measured)** — not the code's speed: on the server every page takes 15–80 ms against a nearby database.
+It is how many times a page waits for the database **one after another**. Each wait costs a round trip; on a hosted
+database that is 1–2 ms in the same region and about 200 ms between Washington (Vercel's default) and Mumbai. Timed
+with the production build and a database 40 ms away:
+
+| | before | after |
+|---|---|---|
+| Home (Admin, HR, Accounts) | 1.2–1.4 s · about 30 waits | 0.2–0.3 s · 4–6 waits |
+| Attendance | 0.83 s · 20 waits | 0.19 s · 4 waits |
+| My attendance | 0.49 s · 12 waits | 0.14 s · 3 waits |
+| Any other page | 0.22–0.40 s · 5–9 waits | 0.10–0.22 s · 2–5 waits |
+
+At 200 ms a round trip Home went from about 6 s to about 1 s, and every other page from about 1 s to 0.4 s.
+
+**Fixed**
+- **Every page and API call** read the session, then the login, then the employee record, then the pension, then the
+  way of working, then wrote "last seen" — six waits before any work. Now one query does the reading, and the "last
+  seen" write happens after the response. The layout's two counts (approvals waiting, Ask) are read together.
+- **Home** asked its tiles one after another (about 25 waits) and some things twice (attendance locks due, filings
+  due, the pensioner's record). Every tile and every to-do item now reads at the same time; each shared answer is
+  worked out once per page. The daily jobs it starts (retirements, exits, reminders) run after the response.
+- **The attendance "today" board** (Home, Attendance) read each section's day separately — twelve waits for twelve
+  sections. It reads everyone's day once and splits it by section in memory. The section register (Attendance,
+  month lock), My attendance and the lock overview read what they need together instead of in a row.
+- **Settings** reads all settings in one query, and Ask's database-role check is remembered once it succeeds.
+- **A click shows the next screen at once**: a loading outline while the data arrives (before, a click seemed to do
+  nothing until the whole page was there).
+- `PERF_LOG_QUERIES=1` writes each query and its time to the server log, to find the next slow page.
+
+**To do on the Vercel copy** — set the Function Region to the database's region (Vercel → Settings → Functions; `bom1`
+for a database in Mumbai). That is the single biggest gain left, and only the account owner can change it
+(docs/DEPLOYMENT.md §12). A database that sleeps when idle (Neon's free plan) also adds a second or so to the first
+page after a quiet spell.
+
+**Verified** — typecheck, lint, 519 unit and integration tests, production build, all 70 browser checks that apply on
+this date (the Form 24Q check waits for a finished quarter), and the timings above before and after.
+
+### 2026-11-17 — Ask redesigned; the month lock no longer times out ✅
+**Asked by the client:** "the Ask AI has a very bad UI … add the Ask AI button in the sidebar, keep the message box at
+the bottom of the page, make it feel premium — inspiration from ChatGPT and Claude"; and an error while reviewing and
+locking a month's attendance ("A query cannot be executed on an expired transaction … 5000 ms").
+
+**Ask AI — built**
+- **Ask AI in the sidebar**: one button above the menu (not one of its eight places), in the phone menu too; on a phone
+  the top bar also has the mark.
+- **The screen fills the page** under the top bar: the conversation scrolls, the question box stays at the bottom (above
+  the phone's bottom bar), the page itself never scrolls.
+- **Empty screen**: a greeting by name and time of day (India time), what Ask does, the questions it suggests for this
+  login as cards with an icon each, and what is sent where.
+- **Conversation**: the question in a soft bubble on the right; the answer full width next to the Ask mark, written as it
+  arrives with a caret; while it works, what it is doing now and each look-up done so far; when it is done, "How this
+  was worked out · N look-ups" above the answer, the rows behind a list, Copy and Ask again; an error with Ask again.
+- **The question box**: grows with what is typed, Enter sends and Shift + Enter starts a new line, a round send button
+  (Stop while it works), "Only what your login may see", and a button to jump to the latest message after scrolling up.
+- The bar of the screen names the service that answers (Gemini, GPT or Claude, or "Practice copy"), the Board's
+  documents and New chat. "Ask" is now "Ask AI" (Hindi "एआई से पूछें").
+
+**Attendance — fixed**
+- The month lock wrote every person's every day one statement at a time inside one transaction — about 900 statements
+  for a 30-person section — and ran past the 5-second limit on a hosted database (the Vercel copy). It now works the
+  rows out first and writes them in a few statements (new days in batches, decided days one by one, leave debits in
+  one), with a 30-second limit as a margin.
+- The same pattern in the approval of a month's muster (up to 2,000 entries) is batched the same way, and approving
+  anything now has the same 30-second limit (the change is applied in the approval's own transaction).
+
+**Verified** — typecheck, lint, the attendance, leave, approvals, payroll and simple-way tests (47), build, browser checks
+for attendance (punch file, correction, officer's decision and month lock, muster, holiday calendar), Ask (8, WCAG 2.1 AA
+in English and Hindi) and every phone layout (12). Looked at on a desktop and on a phone in Hindi.
+
+### 2026-11-17 — Ask: the Board chooses the AI service — Gemini (default), GPT or Claude 🟡
+Asked by the client: "set the system to change the model provider between GPT, Claude and Gemini, and set API key
+values according to them; set Gemini as the default."
+
+**Decided**
+- **Settings → Ask** chooses the service and the model asked at it: **Gemini** (`gemini-3.8-flash`, the default), **GPT**
+  (`gpt-5.5`) or **Claude** (`claude-opus-5-5`). The model name can be changed (for example `gemini-4-argon`).
+- **Each service has its own key.** A key entered in Settings is encrypted with the Board's data key (AES-256-GCM),
+  kept in a settings row the settings API cannot read, never returned to a browser (only its last four characters are
+  shown), left out of the full data export, and every change is audited without the key. With no key saved, the
+  server's environment is used (`GEMINI_API_KEY` / `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Saving a
+  secret in Settings departs from PRD §12 rule 7 (settings only *name* the variable holding a secret); this was done
+  so the Admin can set Ask up without the server's files, and a Board that prefers the rule leaves the fields empty.
+- Keys and the choice of service: the Board's Admin and IT support. IT support still gets no people or pay through Ask.
+- **Test** asks the service one word and shows the person setting it up the service's own message on failure — how a
+  wrong key is told from a wrong model name. Everyone else gets plain words ("not set up", "busy", "could not reach").
+- Nothing about access changed: whichever service answers, it reads only the views and documents the person may see.
+
+**Built**
+- The question loop speaks a neutral conversation format (`modules/ask/model.ts`); one adapter per service on its
+  official SDK — `model-gemini.ts` (`@google/genai`, function declarations; the model's parts are handed back unchanged
+  so its reasoning signatures survive), `model-openai.ts` (`openai`, the Responses API with `store: false` and the
+  reasoning carried along encrypted), `model-claude.ts` (`@anthropic-ai/sdk`, as before).
+- `modules/ask/config.ts`: the choice, the keys, the environment fallback, the Test; API routes `/api/v1/ask/config`,
+  `/api/v1/ask/keys/{gemini|openai|claude}` (PUT, DELETE) and `…/test`.
+- The Settings card: who may ask; the three services with model, key status, Save key, Test, Remove key.
+
+**Fixed while verifying**
+- The Ask button in the top bar pushed a 320 px screen sideways; below 420 px it shows only its mark.
+- Attendance → Today: before office time everyone is "not in yet" and the list scrolls inside its card; it was not
+  reachable by keyboard (WCAG "scrollable-region-focusable"). This failed before 9 a.m. whether or not Ask was there.
+- The adapters sent an empty tool list on the connection test; they now send none.
+
+**Verified** — typecheck, lint, 519 unit and integration tests (new: each adapter through its real SDK against a local
+stand-in for the service's streaming protocol — the key, model, instructions, tools, the tool result and the service's
+own turn handed back; keys saved encrypted, rights, the environment fallback, a saved key winning over the environment,
+error wording, the Test, the export without the keys), production build, all 71 browser checks (new: the Admin chooses
+GPT with another model and back, saves and removes a key, the key never reaches a page or an API response; HR is
+refused) — every Ask screen also passes the WCAG 2.1 AA scan and fits a 320 px screen.
+
+**Still to do / to know**
+- **No live call has been made to any of the three services** — no key was available here, and this session's network
+  could not reach their documentation either, so model names and request options follow the SDKs' own bundled
+  documentation and types. First step on a test copy: enter the Gemini key in Settings → Ask, press Test, then ask the
+  suggested questions as an employee, HR and Accounts. If a model name has changed at the service, Test says so and
+  the name is edited in the same card.
+- GPT and Gemini have not had their instructions tuned on real questions; Claude neither.
+
+### 2026-11-17 — Ask: questions in plain words, answered within each login's rights 🟡
+Asked by the client: "add the generative AI in this, that anybody can ask any question related to the data and policy
+of the department and any other info … the data can be fetched from the database by generating SQL query and running
+them, but here access control matters the most — which person has permission to which type of data."
+
+**Decided**
+- **The model is never the access control.** It writes SQL; the system decides what that SQL may read. Three walls,
+  each tested on its own, so that a mistake in one opens nothing:
+  1. *Reach* — per area (people, service book, attendance, leave, pay, loans, tax and funds, pension, rates, hiring,
+     logins, audit trail) the whole Board, the person's section, their own record or nothing, from the same §14 matrix
+     as the screens, in both ways of working (`modules/ask/scope.ts`).
+  2. *Guard* — every statement is parsed with PostgreSQL's own parser (libpg-query) and refused unless it is one
+     SELECT over the views listed for that person, with named functions, operators and types only.
+  3. *Database* — the statement runs read-only, with a time limit, through `ask.run()`, a function that executes as
+     the role `dcb_ask`: it can read the 52 views of the `ask` schema and nothing else, and inside it PostgreSQL
+     refuses any change of role. Each view filters its own rows from a pass that lives 30 seconds.
+- **The model never reads a table**, only views made for it. Aadhaar, PAN, bank account, PRAN, UAN, ESIC and GPF
+  numbers are in no view ("is it on file" only), so they cannot be sent to the AI service whatever is asked.
+- **Own-record rules follow the services**: anyone with an employee record reads their own leave, attendance,
+  payslips (once paid), funds and service book (approved entries) — also an HR clerk for themself. A section head gets
+  the section's staff list (name, post, mobile), attendance and leave; pay stays their own. A pensioner's login reads
+  the pension, not the old employee record. The User & settings manager gets logins and system events, never people
+  or pay — also in the simple way.
+- **Policies are the Board's own text**: documents pasted by the Admin (the HR manager too, in the simple way), each
+  with who may read it. Found by plain word matching (English and Hindi) — no outside service, easy to explain.
+- **Off until there is a key**; then the Board chooses who may ask: nobody, office staff or everyone (the default).
+- Claude Opus 5.5 through the Anthropic SDK (`ASK_AI_MODEL` changes it). If a safety check declines a request the API
+  tries its fallback model in the same call.
+- Conversation history is kept in the browser only; every question is in the audit trail with the statements that
+  were run and the rows counted — never the rows themselves.
+
+**Built**
+- **Ask screen** (`/ask`, a button in the top bar for every login the Board has opened it to): questions suggested by
+  what the login can read; what is being looked up while it works; the answer as paragraphs, lists and tables (built
+  as real elements, never HTML from the model); the rows behind a list, with CSV download; "How this was worked out" —
+  each look-up in plain words and its query; Stop; copy. English and Hindi; fits a phone.
+- **The Board's documents** (`/ask/documents`): add, change, switch off, remove; a text file can be loaded. Four
+  practice documents come with the demo seed (and `db:demo-addons`).
+- **Settings → Ask**: off / office staff / everyone; says when the key or the database role is missing.
+- **Database**: `AskGrant` (the pass), `KnowledgeDoc`; the `ask` schema — 52 views, two helper functions and
+  `ask.run()`; the role `dcb_ask`, made by the migration (`scripts/ask-role.sql` for a database user that may not
+  create roles). The whole-data export leaves the passes out.
+- **When the model has no access** the guard's message says so in words the model passes on ("not available to this
+  user") instead of an empty result that would read as "there are none".
+- **Limits**: 200 rows and 8 seconds per statement, 8 steps and 12 look-ups per question, 30 questions per person in
+  10 minutes.
+
+**Found and fixed while building**
+- On one shared connection PostgreSQL lets a statement undo `SET ROLE` with `set_config('role', …)`. The guard already
+  refused that call; the statement now also runs inside a SECURITY DEFINER function, where the database itself refuses
+  it — tested by sending such statements straight past the guard.
+- The full data export ordered every table by `id`; the pass table has none and must not be exported anyway.
+
+**Verified** — see the entry above this one for the final figures (this entry was written before the choice of AI service was added).
+
+**Still to do / to know**
+- **Not yet run against the real AI service**: no API key was available while building. The Claude adapter is tested
+  through the real SDK against a local stand-in for the API (what is sent, a streamed tool call, a streamed answer,
+  refused key, busy service), and everything behind it is the real thing. First step on a test copy: set
+  `ANTHROPIC_API_KEY`, ask the suggested questions as an employee, HR and Accounts, and read "How this was worked out".
+  The wording of the instructions (`modules/ask/prompt.ts`) will want tuning on real questions.
+- **The Board's decision**: with a key set, names, pay and service details needed for an answer leave the server for
+  the AI service. Whether that fits the Board's data policy (PRD §16: data in India) is theirs to decide before
+  production; docs/DEPLOYMENT.md §13 says exactly what is sent and what never is.
+- Attendance of an open month is worked out from punches when a screen shows it; Ask reads locked months' totals,
+  recorded days and raw punches, and is told so — a "was I late on the 3rd?" for the current month is answered from
+  punches, not from the day's worked-out status.
+- Documents are text only (paste, or a .txt / .md file); PDFs are not read.
+- `npm run build` stopped every other run with Next.js's own notice that the installed version (16.4.2) has a known
+  security fix available — also without this change. The upgrade is not part of this work; to be decided.
 
 ### 2026-11-16 — The simple way of working: three roles, entries that count at once, payroll in three steps ✅
 Asked by the client: "this is too complex … a very long and complicated process for the payroll and the salary

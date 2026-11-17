@@ -1,3 +1,4 @@
+import { askHi } from "./ask.hi";
 import { easyHi } from "./easy.hi";
 import type { en } from "./en";
 import type { DeepStrings } from "./types";
@@ -3902,8 +3903,10 @@ export const hi: DeepStrings<typeof en> = {
     rateLimited: "बहुत अधिक अनुरोध। कृपया थोड़ा रुकें।",
     badOrigin: "सुरक्षा के लिए यह अनुरोध रोका गया। कृपया पृष्ठ फिर से लोड करें।",
     pageNotFound: "यह पृष्ठ मौजूद नहीं है।",
+    fileGone: "यह फ़ाइल अब सर्वर पर नहीं है। इसे इसकी स्क्रीन से फिर से बनाएँ।",
     noAccessTitle: "पहुँच नहीं",
     noAccessBody: "आपके लॉगिन में यह स्क्रीन शामिल नहीं है। ज़रूरत हो तो उपयोगकर्ता एवं सेटिंग प्रबंधक से कहें।",
   },
   easy: easyHi,
+  ask: askHi,
 };

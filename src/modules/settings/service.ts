@@ -10,23 +10,29 @@ import { forgetWorkflow } from "./workflow";
 
 export async function getSetting<K extends SettingKey>(boardId: string, key: K, tx: DbLike = db): Promise<SettingValue<K>> {
   const row = await tx.setting.findUnique({ where: { boardId_key: { boardId, key } } });
-  if (!row) return SETTING_DEFAULTS[key];
-  // Merge over defaults so settings saved by an older version gain new fields safely.
-  const merged = { ...SETTING_DEFAULTS[key], ...(row.value as object) };
-  const parsed = settingsSchemas[key].safeParse(merged);
+  return settingFrom(key, row?.value);
+}
+
+/** A saved value merged over the defaults, so settings saved by an older version gain new fields safely. */
+function settingFrom<K extends SettingKey>(key: K, value: unknown): SettingValue<K> {
+  if (value === undefined || value === null) return SETTING_DEFAULTS[key];
+  const parsed = settingsSchemas[key].safeParse({ ...SETTING_DEFAULTS[key], ...(value as object) });
   return (parsed.success ? parsed.data : SETTING_DEFAULTS[key]) as SettingValue<K>;
 }
 
+/** Every setting, in one query. */
 export async function getAllSettings(boardId: string) {
   const keys = Object.keys(settingsSchemas) as SettingKey[];
-  const entries = await Promise.all(keys.map(async (k) => [k, await getSetting(boardId, k)] as const));
-  return Object.fromEntries(entries) as { [K in SettingKey]: SettingValue<K> };
+  const rows = await db.setting.findMany({ where: { boardId, key: { in: keys } } });
+  const saved = new Map(rows.map((r) => [r.key, r.value]));
+  return Object.fromEntries(keys.map((k) => [k, settingFrom(k, saved.get(k))])) as { [K in SettingKey]: SettingValue<K> };
 }
 
 /** S-82: only the User & settings manager may change settings (and the Admin, in the simple way of working). */
 export async function updateSetting<K extends SettingKey>(actor: Actor, key: K, value: unknown) {
   // How work is approved is the Board's own decision: its Admin may always change it.
-  if (!canManageUsers(actor) && !(key === "workflow" && isFullAdmin(actor))) throw forbidden();
+  // Who may use Ask AI is the Board's decision too.
+  if (!canManageUsers(actor) && !((key === "workflow" || key === "ask") && isFullAdmin(actor))) throw forbidden();
   const parsed = settingsSchemas[key].parse(value) as SettingValue<K>;
   const saved = await db.$transaction(async (tx) => {
     const before = await getSetting(actor.boardId, key, tx);

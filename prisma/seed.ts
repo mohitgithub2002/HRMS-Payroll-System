@@ -15,7 +15,7 @@ import { sealWith } from "../src/lib/crypto-core";
 import { addDays, addYears, fromISODate, retirementDate, shiftMonth, todayIST } from "../src/lib/dates";
 import { hashPassword } from "../src/lib/password";
 import { verhoeffCheckDigit } from "../src/lib/validators";
-import { seedDemoLeaver } from "./seed-addons";
+import { seedAskDocuments, seedDemoLeaver } from "./seed-addons";
 import { seedAttendance } from "./seed-attendance";
 import { seedLeaveTypes } from "./seed-leave";
 import { seedPayrollDemo, seedPayrollRules } from "./seed-payroll";
@@ -347,6 +347,7 @@ async function main() {
 
   // Client add-on: a resignation at the end of last month (with a running loan) whose settlement Payroll prepares.
   await seedDemoLeaver(db, board.id);
+  await seedAskDocuments(db, board.id);
 
   // A demo vacancy (advertised, with applicants) so the recruitment screens have something to show.
   if ((await db.vacancy.count({ where: { boardId: board.id } })) === 0) {

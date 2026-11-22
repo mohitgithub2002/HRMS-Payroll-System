@@ -123,10 +123,13 @@ Copy `.env.example` to `/srv/dcb-hrms/.env`, owned by `dcbhrms`, mode `600`.
 | `OTP_PEPPER` | `openssl rand -base64 32` | Mixed into stored OTP hashes |
 | `SMS_PROVIDER` | `http` | Gateway URL, sender ID, DLT entity and template IDs are set in Settings → SMS; the API key stays in an environment variable whose **name** the setting holds |
 | `STORAGE_DIR` | `/srv/dcb-hrms-files` | |
+| `STORAGE_DRIVER` | `disk` (the default off Vercel) | `database` keeps files in the database table `StoredFile` instead of the folder — the default on Vercel, where a folder is not shared between function instances |
 | `CHROMIUM_PATH` | empty, or the path of a Chromium the IT cell installed | Empty = the Chromium installed by `npx playwright-core install chromium` (§6) |
 | `TRUSTED_PROXY_HOPS` | `1` | Reverse proxies in front of the app that add to `X-Forwarded-For`. nginx alone = 1; a cloud load balancer + nginx = 2 |
 | `BOOTSTRAP_ADMIN_MOBILE` / `BOOTSTRAP_ADMIN_PASSWORD` | the IT cell officer's mobile, a one-time password | Used once by the first seed to create the `IT01` User & settings manager, who must change the password at first sign-in |
 | SMTP user / password, SMS key | named in Settings | e.g. `SMS_API_KEY`, `SMTP_USER`, `SMTP_PASSWORD` in the same `.env` |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | empty | Only for Ask (§13), and only if the key is not entered in Settings → Ask (where it is saved encrypted). No key anywhere = Ask is off and nothing is sent |
+| `ASK_DATABASE_URL` | empty, or a login as `dcb_ask` | Optional separate database login for Ask (§13) |
 
 **Key custody.** The three keys are generated once per copy, written to the `.env` and also sealed on paper
 or in the Board's HSM / key vault, held by a named officer (not the vendor). Production keys are never
@@ -313,6 +316,10 @@ about a second; a production-size database restores well inside the 4-hour limit
 
 ---
 
+**Finding a slow page.** With `PERF_LOG_QUERIES=1` the server writes each database query and its time to the log
+(`[q] 1.2ms SELECT …`, no values). A page should need only a few round trips one after another; a long run of the
+same query shape is a loop that should read in one go.
+
 ## 10. Before go-live checklist
 
 Security and access
@@ -357,17 +364,21 @@ Acceptance checks
 | Role rights as data (PRD §14); nobody prepares, checks or approves their own pay; maker ≠ checker | `src/lib/auth/access.ts`, `src/lib/approvals/` |
 | Audit trail cannot be edited (database trigger), 8 years | `prisma/migrations/*audit*`, `src/lib/audit.ts` |
 | Client address taken from the trusted proxy's entry in `X-Forwarded-For`, never from a value the browser typed | `src/lib/request-meta.ts` |
+| Ask AI: keys of the AI services encrypted at rest, never returned to a browser, audited without their value; each login's reach from the §14 matrix; every statement checked with PostgreSQL's own parser (one SELECT, listed views, named functions only); run read-only as the role `dcb_ask`, which can read nothing but views that filter their rows from a 30-second pass; no identity or account number in any view; every question audited with its statements | `src/modules/ask/`, `prisma/migrations/*_ask_views` |
 | Dependencies pinned; `npm audit` clean at release | `package.json`, `package-lock.json` |
 
 ---
 
 ## 12. A demo copy on Vercel
 
-Vercel is fine for **showing the product** (a training or demo copy). It is **not** for production: files
-written there vanish between runs, and the data must stay on government cloud in India (§16).
+Vercel is fine for **showing the product** (a training or demo copy). It is **not** for production: the data
+must stay on government cloud in India (§16).
 
 1. **Database**: a hosted PostgreSQL 16 (Neon, Supabase…). Use `?sslmode=verify-full` in the URL (this also
-   silences pg's SSL-mode warning). Create the tables and the demo data once from your machine:
+   silences pg's SSL-mode warning). **Put the database and the Vercel functions in the same region** (Vercel →
+   Settings → Functions → Function Region; for Neon or Supabase in Mumbai choose `bom1`). Every page waits for a
+   few round trips to the database; from Washington (Vercel's default, `iad1`) to Mumbai each one is about 200 ms,
+   which makes every page feel slow however fast the code is. In the same region a round trip is 1–2 ms. Create the tables and the demo data once from your machine:
    ```bash
    DATABASE_URL="<hosted url>" APP_ENV=training npx prisma migrate deploy
    DATABASE_URL="<hosted url>" APP_ENV=training DATA_ENCRYPTION_KEY=… BLIND_INDEX_KEY=… OTP_PEPPER=… npx prisma db seed
@@ -376,10 +387,16 @@ written there vanish between runs, and the data must stay on government cloud in
    `DATABASE_URL`, `APP_ENV=training`, `APP_URL=https://<project>.vercel.app`, `DATA_ENCRYPTION_KEY`,
    `BLIND_INDEX_KEY`, `OTP_PEPPER` (the **same keys** used for the seed), `SMS_PROVIDER=console`,
    `TRUSTED_PROXY_HOPS=1`. With `training` + `console` the OTP is shown on the sign-in screen.
+   For Ask (§13) sign in as the Admin and enter the AI service's key under Settings → Ask (or add `GEMINI_API_KEY`
+   here); without a key the Ask button is hidden for everyone but the Admin.
 3. **PDFs**: nothing to set. On Vercel the app uses a Chromium built for serverless functions
    (`@sparticuz/chromium`); the first PDF after a quiet spell takes a few seconds longer.
-4. **Uploaded files** (documents, migration files, generated bank files) go to `/tmp` and are lost when Vercel
-   recycles the function. Downloads made right away work; nothing is kept.
+4. **Files** (uploaded documents, migration files, bank and return files, saved PDFs) are kept **in the database**
+   on Vercel (`STORAGE_DRIVER=database` is the default there). A Vercel function's disk is its own: a bank file
+   written by one instance could not be downloaded from the next, which is why downloads failed before. Files made
+   on a demo copy before this change were in `/tmp` and are gone — the download says so; make the bank file (or
+   the document) again from its screen. Slow downloads that build a PDF on request (payslips, PPO, Form 16…) may
+   run up to 60 seconds (`maxDuration`); the plan's limit applies if it is lower.
 5. Deploy by pushing the branch Vercel watches. Vercel runs the `vercel-build` script, which **applies any new
    database migrations first** (`prisma migrate deploy`) and then builds — so a new version never meets an old
    database. `DATABASE_URL` must therefore be available to builds (tick the environments when you add it). If
@@ -402,3 +419,78 @@ written there vanish between runs, and the data must stay on government cloud in
    DATABASE_URL="<hosted url>" npx prisma migrate deploy        # macOS / Linux
    $env:DATABASE_URL="<hosted url>"; npx prisma migrate deploy   # Windows PowerShell
    ```
+
+---
+
+## 13. Ask — questions in plain words (client add-on)
+
+People ask in their own words ("How much leave do I have left?", "Who retires next year?") and get an answer from
+the Board's records and from its own documents (policies, orders, circulars). **Ask is off until an API key is set.**
+
+### The AI service
+The Board chooses, under **Settings → Ask**, which service reads the question and writes the answer:
+
+| Service | Default model | Key from |
+|---|---|---|
+| **Gemini** (Google) — the default | `gemini-3.8-flash` | Google AI Studio |
+| **GPT** (OpenAI) | `gpt-5.5` | the OpenAI platform |
+| **Claude** (Anthropic) | `claude-opus-5-5` | the Anthropic console |
+
+The model name can be changed there (for example `gemini-4-argon` for Google's larger model); it is the name as the
+service lists it. Each service has its own key. **Test** asks the service one word and, when it fails, shows the
+service's own message — that is how a wrong key is told from a wrong model name.
+
+**Where a key is kept.** Entered in Settings, a key is encrypted with the Board's data key (AES-256-GCM, the same key
+that protects Aadhaar and bank numbers), stored apart from the other settings, never sent back to a browser (the
+screen shows only its last four characters), left out of the full data export, and every change is in the audit trail
+without the key. This is a deliberate exception to the rule that settings only name the environment variable of a
+secret (PRD §12 rule 7), made so that the Admin can set up Ask without the server's files. A Board that prefers the
+rule keeps the fields empty and puts the key in the `.env` (`GEMINI_API_KEY`, `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`): a key saved in Settings wins, the environment is used when none is saved.
+
+### What leaves the server, and what never does
+To answer, the application sends to the chosen AI service (Google, OpenAI or Anthropic, over HTTPS): the question, a description of the
+views the person may read, the passages of the Board's documents that match, and the rows the model asks for — which
+are already limited to what that person may see. **Never sent, to anyone:** Aadhaar, PAN, bank account, PRAN, UAN,
+ESIC and GPF account numbers (they are in no view), passwords, sessions, OTPs, the audit trail's old and new values.
+Before switching Ask on for production the Board should decide, with its IT cell, whether sending names, pay and
+service details to a service outside its own servers fits its data policy (PRD §16 keeps the data in India), and what
+agreement and retention terms it has with the provider. On a test or training copy with demo data there is nothing to
+decide. The switch **Settings → Ask** chooses who may use it: nobody, office staff, or everyone.
+
+### How access is kept (three walls, each tested on its own)
+1. **The person's reach** comes from the same matrix as the screens (PRD §14): per area — people, service book,
+   attendance, leave, pay, loans, tax and funds, pension, rates, hiring, logins, audit trail — the whole Board, the
+   person's section, their own record, or nothing. The model has no say in it.
+2. **The guard**: every statement the model writes is parsed with PostgreSQL's own parser and refused unless it is one
+   `SELECT` over the views listed for that person, using only named functions, operators and types.
+3. **The database**: the statement runs in a read-only transaction, with a time limit, through the function
+   `ask.run()`, which executes as the role `dcb_ask`. That role can read the views of the `ask` schema and nothing
+   else, and inside the function PostgreSQL refuses any change of role. Each view shows only the rows of a pass that
+   the application wrote for this one statement (30 seconds, random 256-bit token).
+
+Every question is written to the audit trail (action `ASK`) with the statements that were run and how many rows each
+returned — never the rows. A person may ask 30 questions in 10 minutes.
+
+### Setting it up
+1. **The service and its key**: sign in as the Admin (or IT support), open **Settings → Ask**, paste the key of the
+   service you use (Gemini unless you choose another), press **Save key**, then **Test**. Or put the key in the `.env`
+   (Vercel: Environment Variables) and restart.
+2. **The database role** is made by the migration when the application's database user may create roles (the default
+   user of Neon, Supabase, RDS and of the local docker set-up may). If it may not, Settings → Ask says the read-only
+   role is missing; a database administrator then runs once:
+   ```bash
+   psql -d dcb_hrms -v app=dcbhrms -f scripts/ask-role.sql
+   ```
+3. **Optional, stricter**: give Ask its own login — `ALTER ROLE dcb_ask LOGIN PASSWORD '…'` — and set
+   `ASK_DATABASE_URL` to the same database with that user. Then even the connection Ask uses cannot read a table.
+4. **The Board's documents**: the Admin (and the HR manager in the simple way of working) pastes policies, orders and
+   circulars under **Ask → The Board's documents**, and says who may read each: everyone, office staff, or the Admin.
+5. **Try it** as an employee, as HR and as Accounts before opening it to everyone. A first check that needs no key:
+   on a test copy set `ASK_AI_PROVIDER=scripted` — Ask then answers a few fixed questions, and a line starting with
+   `sql:` runs a statement through the same guard and role, which shows what each login can and cannot read.
+
+### Cost and limits
+Each question is one to a few calls to the model; the service bills the Board's own account for them. At most 200 rows come
+back from a statement, a statement is stopped after 8 seconds, and a question after 8 steps. The model can be wrong:
+the screen says so under every answer, and "How this was worked out" shows each look-up and its query.

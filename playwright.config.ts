@@ -29,7 +29,9 @@ export default defineConfig({
         url: `http://localhost:${PORT}/login`,
         reuseExistingServer: false,
         timeout: 60_000,
-        env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL ?? "", APP_URL: `http://localhost:${PORT}` } as Record<string, string>,
+        // Ask AI answers from its scripted stand-in here (no outside service, the same answer every run); everything
+        // behind it — the guard, the read-only role, each login's reach — is the real thing.
+        env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL ?? "", APP_URL: `http://localhost:${PORT}`, ASK_AI_PROVIDER: "scripted", ASK_DATABASE_URL: "" } as Record<string, string>,
       },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: [/.*\.phone\.spec\.ts/, /.*\.simple\.spec\.ts/] },

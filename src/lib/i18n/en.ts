@@ -1,3 +1,4 @@
+import { askEn } from "./ask.en";
 import { easyEn } from "./easy.en";
 /**
  * English text. Simple words, short sentences, government terms where clerks expect them
@@ -3900,8 +3901,10 @@ export const en = {
     rateLimited: "Too many requests. Please wait a moment.",
     badOrigin: "This request was blocked for safety. Please reload the page.",
     pageNotFound: "This page does not exist.",
+    fileGone: "This file is no longer kept on the server. Make it again from its screen.",
     noAccessTitle: "No access",
     noAccessBody: "Your login does not include this screen. Ask the User & settings manager if you need it.",
   },
   easy: easyEn,
+  ask: askEn,
 } as const;

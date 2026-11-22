@@ -13,7 +13,8 @@ import { canCutOver } from "./staging";
  * or to move to another system. Sign-in secrets (password hashes, sessions, OTPs) are never exported; Aadhaar, PAN and
  * bank numbers stay encrypted exactly as stored (the Board's key opens them). Only an Admin may take it, and it is logged.
  */
-const SKIP = new Set(["Session", "OtpChallenge"]);
+// AskGrant: the passes of Ask AI live for seconds and open records while they do — never part of an export.
+const SKIP = new Set(["Session", "OtpChallenge", "AskGrant", "StoredFile"]);
 const OMIT: Record<string, string[]> = { User: ["passwordHash"] };
 /** Tables keyed by more than one column are ordered by those columns. */
 const ORDER: Record<string, object> = { Setting: [{ boardId: "asc" }, { key: "asc" }], Sequence: [{ boardId: "asc" }, { name: "asc" }] };
@@ -35,7 +36,9 @@ export async function exportAllData(actor: Actor) {
       if (page.length < 5000) break;
     }
     const omit = OMIT[model] ?? [];
-    const clean = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !omit.includes(k))));
+    // The API keys of Ask's AI services are secrets too, even encrypted: that settings row stays behind.
+    const kept = model === "Setting" ? rows.filter((r) => r.key !== "askKeys") : rows;
+    const clean = kept.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !omit.includes(k))));
     const columns = clean.length ? Object.keys(clean[0]) : [];
     zip.file(`json/${model}.json`, JSON.stringify(clean, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 1));
     zip.file(`csv/${model}.csv`, toCsv(columns, clean.map((r) => columns.map((c) => cell(r[c])))));
@@ -51,7 +54,7 @@ export async function exportAllData(actor: Actor) {
       "csv/  one file per table (UTF-8 with BOM, opens in Excel)",
       "json/ the same tables as JSON",
       "",
-      "Not included: password hashes, sessions and one-time passwords.",
+      "Not included: password hashes, sessions, one-time passwords and the keys of outside services.",
       "Aadhaar, PAN and bank account numbers are in the *Enc columns, encrypted (AES-256-GCM) with the Board's key.",
       "",
       "Rows per table:",

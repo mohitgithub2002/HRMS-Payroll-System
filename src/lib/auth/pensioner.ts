@@ -13,6 +13,11 @@ export async function pensionOfUser(user: { pensionerId: string | null; employee
   const where = user.pensionerId ? { id: user.pensionerId } : user.employeeId ? { employeeId: user.employeeId, relation: "SELF" } : null;
   if (!where) return null;
   const p = await db.pensioner.findFirst({ where, orderBy: { startDate: "desc" }, select: { id: true, startDate: true, endDate: true } });
+  return pensionView(p);
+}
+
+/** The pension a login sees, from its pension record (or none when it ended more than a year ago). */
+export function pensionView(p: { id: string; startDate: Date; endDate: Date | null } | null): { id: string; from: ISODate } | null {
   if (!p) return null;
   if (p.endDate && addDays(toISODate(p.endDate), VIEW_AFTER_END_DAYS) < todayIST()) return null;
   return { id: p.id, from: toISODate(p.startDate) };
